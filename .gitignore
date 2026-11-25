@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+tools/out/
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+
+# GPT 出的高清原图只留在本机，程序用的是 tools/build_hd.py 打包出来的 rig-data.js
+assets/beagle/hd-library/

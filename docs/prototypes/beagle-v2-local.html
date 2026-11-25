@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}</style></head><body>
+<title>比格 Q 版第二稿</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: 上面一块大的模拟桌面（宠物在任务栏上自己活动），下面状态按钮；最后一排五个小舞台做成长对比 */
+:root{
+  --bg:#EEF0ED; --surface:#FFFFFF; --fg:#1D2220; --muted:#5B645F; --line:#D5DAD5;
+  --accent:#A65A1F; --accent-fg:#FFFFFF; --chip:#E6E9E5; --focus:#2F6F73;
+  --font-ui:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Segoe UI",sans-serif;
+  --font-num:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
+  --wp-light-a:#D3DEE8; --wp-light-b:#EEF2F6; --bar-light:rgba(255,255,255,.8); --icon-light:rgba(30,40,52,.2); --z-light:#56606A; --sh-light:rgba(30,40,52,.16); --puff-light:rgba(110,122,134,.32);
+  --wp-dark-a:#11161D; --wp-dark-b:#283140; --bar-dark:rgba(10,12,16,.82); --icon-dark:rgba(255,255,255,.18); --z-dark:#C9D1DA; --sh-dark:rgba(0,0,0,.5); --puff-dark:rgba(255,255,255,.3);
+  --wp-busy-1:#E07B39; --wp-busy-2:#2F6F73; --wp-busy-3:#7A4A2A; --wp-busy-4:#C58B4E; --wp-busy-5:#3B2A20; --bar-busy:rgba(24,18,14,.72); --icon-busy:rgba(255,255,255,.2); --z-busy:#FFF3E2; --sh-busy:rgba(0,0,0,.35); --puff-busy:rgba(255,255,255,.4);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121514;--surface:#1B1F1E;--fg:#E6EAE7;--muted:#9AA39F;--line:#2C3230;--accent:#E29B5C;--accent-fg:#1B120B;--chip:#262B29;--focus:#7FC3C6;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121514;--surface:#1B1F1E;--fg:#E6EAE7;--muted:#9AA39F;--line:#2C3230;--accent:#E29B5C;--accent-fg:#1B120B;--chip:#262B29;--focus:#7FC3C6;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+header h1{font-size:26px;line-height:1.3;margin:0;letter-spacing:.02em;text-wrap:balance}
+header p{margin:6px 0 0;color:var(--muted);max-width:66ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;min-width:0}
+.stage{position:relative;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;overflow:hidden;--barh:30px}
+.stage svg{display:block;width:100%;height:auto;overflow:visible;position:relative;z-index:1}
+.stage-main{min-height:300px}
+.stage-main.small svg{width:512px;max-width:100%}
+.stage-main.small{--barh:40px}
+.bar{width:100%;height:var(--barh);background:var(--bar);display:flex;align-items:center;justify-content:center;gap:8px;flex:none}
+.bar i{width:15px;height:15px;border-radius:4px;background:var(--icon)}
+.bg-light{background:linear-gradient(165deg,var(--wp-light-a),var(--wp-light-b));--bar:var(--bar-light);--icon:var(--icon-light);--zcol:var(--z-light);--shadow:var(--sh-light);--puff:var(--puff-light)}
+.bg-dark{background:linear-gradient(165deg,var(--wp-dark-a),var(--wp-dark-b));--bar:var(--bar-dark);--icon:var(--icon-dark);--zcol:var(--z-dark);--shadow:var(--sh-dark);--puff:var(--puff-dark)}
+.bg-busy{background:radial-gradient(circle at 18% 30%,var(--wp-busy-1) 0 17%,transparent 18%),radial-gradient(circle at 78% 22%,var(--wp-busy-2) 0 21%,transparent 22%),repeating-linear-gradient(115deg,var(--wp-busy-3) 0 14px,var(--wp-busy-4) 14px 28px,var(--wp-busy-5) 28px 40px);--bar:var(--bar-busy);--icon:var(--icon-busy);--zcol:var(--z-busy);--shadow:var(--sh-busy);--puff:var(--puff-busy)}
+.status{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;padding:12px 16px 4px}
+.status b{font-size:16px}
+.status .hint{color:var(--muted);font-size:13.5px}
+.controls{display:grid;gap:12px;padding:10px 16px 16px}
+.row{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+.lab{font-size:13px;color:var(--muted);letter-spacing:.06em;min-width:2.6em}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-size:13.5px;padding:3px 12px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:transparent;font-weight:600}
+.auto{border:1px dashed var(--accent);color:var(--accent);background:transparent;font:inherit;font-size:13.5px;padding:3px 12px;border-radius:999px;cursor:pointer}
+.auto[aria-pressed="true"]{border-style:solid;font-weight:600}
+.feed{border:0;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:14px;font-weight:600;padding:5px 16px;border-radius:9px;cursor:pointer}
+.feed:disabled{opacity:.5;cursor:default}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--fg);font:inherit;font-size:13.5px;padding:3px 11px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:600}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input[type=range]{accent-color:var(--accent);width:150px}
+.val{font-variant-numeric:tabular-nums;font-family:var(--font-num);font-size:13.5px;min-width:7em}
+.ctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h2{font-size:17px;margin:0}
+.sec-h{padding:14px 16px 4px;display:grid;gap:2px}
+.sec-h p{margin:0;color:var(--muted);font-size:13.5px}
+.gscroll{overflow-x:auto;padding:10px 16px 16px}
+.growth{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:12px}
+.gcell{display:grid;gap:6px;align-content:start}
+.gcell .stage{border-radius:12px;--barh:14px}
+.gcell b{font-size:13.5px;font-family:var(--font-num)}
+.gcell span{font-size:12.5px;color:var(--muted);line-height:1.5}
+.foot{color:var(--muted);font-size:13.5px;max-width:74ch;margin:0}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-ear" x1="0" y1="0" x2=".25" y2="1"><stop offset="0" stop-color="#CF8646"/><stop offset=".7" stop-color="#AE6830"/><stop offset="1" stop-color="#8F5224"/></linearGradient>
+    <radialGradient id="g-iris" cx=".5" cy=".62" r=".62"><stop offset="0" stop-color="#B57A44"/><stop offset=".55" stop-color="#7A4824"/><stop offset="1" stop-color="#3E2412"/></radialGradient>
+    <radialGradient id="g-nose" cx=".4" cy=".3" r=".85"><stop offset="0" stop-color="#4E3E33"/><stop offset="1" stop-color="#211915"/></radialGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <h1>比格 Q 版第二稿</h1>
+    <p>按你挑的第一版继续画。状态从 3 个加到 10 个，默认它会自己活动；长大也不再是整体放大：头、腿、口鼻、爪子、肚子各长各的，小时候头顶和耳朵颜色更深，走路也更晃。</p>
+  </header>
+
+  <section class="card" aria-label="主舞台">
+    <div class="stage stage-main bg-light" id="mainStage"><svg viewBox="0 0 640 200" role="img" aria-label="桌面上的比格"><g id="mainDyn"></g></svg><div class="bar"><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="status"><b id="stName">开心</b><span id="stMode" class="hint">自由活动中</span><span id="stHint" class="hint"></span></div>
+    <div class="controls">
+      <div class="row">
+        <span class="lab">状态</span>
+        <div class="chips" id="chips">
+          <button type="button" class="chip" data-s="happy">开心</button>
+          <button type="button" class="chip" data-s="play">想玩</button>
+          <button type="button" class="chip" data-s="curious">好奇</button>
+          <button type="button" class="chip" data-s="sniff">闻闻</button>
+          <button type="button" class="chip" data-s="bored">无聊</button>
+          <button type="button" class="chip" data-s="sad">委屈</button>
+          <button type="button" class="chip" data-s="hungry">饿了</button>
+          <button type="button" class="chip" data-s="full">吃撑了</button>
+          <button type="button" class="chip" data-s="sleepy">困了</button>
+          <button type="button" class="chip" data-s="asleep">睡着</button>
+        </div>
+        <button type="button" class="auto" id="auto" aria-pressed="true">自由活动</button>
+        <button type="button" class="feed" id="feed">喂一碗</button>
+      </div>
+      <div class="row">
+        <div class="ctl"><span class="lab">月龄</span><input type="range" id="age" min="2" max="12" step="1" value="7" aria-label="月龄"><span class="val" id="ageVal">7 个月</span></div>
+        <div class="ctl"><span class="lab">桌面</span>
+          <div class="seg" id="bg" role="group" aria-label="桌面背景">
+            <button type="button" data-v="light" aria-pressed="true">浅色</button>
+            <button type="button" data-v="dark" aria-pressed="false">深色</button>
+            <button type="button" data-v="busy" aria-pressed="false">花哨壁纸</button>
+          </div>
+        </div>
+        <div class="ctl"><span class="lab">尺寸</span>
+          <div class="seg" id="size" role="group" aria-label="尺寸">
+            <button type="button" data-v="big" aria-pressed="true">放大看</button>
+            <button type="button" data-v="small" aria-pressed="false">桌面尺寸</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="成长对比">
+    <div class="sec-h"><h2>同一只比格，五个月龄</h2><p>比例按真实幼犬的长法分开算，不是同一张图放大。正式版按真实时间每天长一点。</p></div>
+    <div class="gscroll">
+      <div class="growth">
+        <div class="gcell"><div class="stage bg-light"><svg viewBox="0 0 200 140" role="img" aria-label="2 个月"><g class="gdyn" data-m="2"></g></svg><div class="bar"></div></div><b>2 个月</b><span>头大、眼睛偏低、口鼻短、爪子大、肚子圆，头顶和耳朵颜色深</span></div>
+        <div class="gcell"><div class="stage bg-light"><svg viewBox="0 0 200 140" role="img" aria-label="4 个月"><g class="gdyn" data-m="4"></g></svg><div class="bar"></div></div><b>4 个月</b><span>腿开始拉长，还是圆脸</span></div>
+        <div class="gcell"><div class="stage bg-light"><svg viewBox="0 0 200 140" role="img" aria-label="6 个月"><g class="gdyn" data-m="6"></g></svg><div class="bar"></div></div><b>6 个月</b><span>腿先长到位，身子没跟上，有点瘦长</span></div>
+        <div class="gcell"><div class="stage bg-light"><svg viewBox="0 0 200 140" role="img" aria-label="9 个月"><g class="gdyn" data-m="9"></g></svg><div class="bar"></div></div><b>9 个月</b><span>胸口变深，口鼻变长，深色褪成棕色</span></div>
+        <div class="gcell"><div class="stage bg-light"><svg viewBox="0 0 200 140" role="img" aria-label="12 个月"><g class="gdyn" data-m="12"></g></svg><div class="bar"></div></div><b>12 个月</b><span>比例定型，头和身子协调</span></div>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">还没做的：被鼠标拎起来甩、爬到窗口上、其他品种。打样里饿得和消化得都比真实快，方便看变化。</p>
+</div>
+
+<script>
+(() => {
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const n = v => Math.round(v * 100) / 100;
+const add = (a, b) => [a[0] + b[0], a[1] + b[1]], sub = (a, b) => [a[0] - b[0], a[1] - b[1]], mul = (a, s) => [a[0] * s, a[1] * s];
+const len = a => Math.hypot(a[0], a[1]);
+const nrm = a => { const l = len(a); return l < 1e-6 ? [0, 0] : [a[0] / l, a[1] / l]; };
+const rot = (a, r) => { const c = Math.cos(r), s = Math.sin(r); return [a[0] * c - a[1] * s, a[0] * s + a[1] * c]; };
+const lv = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
+const pt = p => `${n(p[0])},${n(p[1])}`;
+let reduce = false; try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+const AMP = reduce ? .4 : 1;
+const BW = 56, BH = 16;
+
+const C = {
+  tan:'#D9914E', tanLight:'#EDB478', tanShade:'#BF7638', tanDeep:'#9C5A27',
+  saddle:'#30261F', saddleLight:'#54443A',
+  white:'#FFFAF2', whiteShade:'#EADCC9', shade:'#E5D5C0',
+  rim:'#2B1A10', pupil:'#170E08', mouth:'#7C2E2A', tongue:'#F48B8B', tongueShade:'#D9666D',
+  blush:'#F5A196', freckle:'#C9A182', brow:'#A9642D', kib:'#9A5E2A',
+  bowl:'#8CC2E5', bowlRim:'#B8DBF1', bowlInner:'#4D82A6'
+};
+
+// ---------- 按月龄分开长：头长得慢，腿先长，胸口最后才变深 ----------
+const eo = x => 1 - Math.pow(1 - x, 2);
+function dims(m){
+  const t = clamp((m - 2) / 10, 0, 1), D = { t };
+  const legT = eo(clamp(t * 1.55, 0, 1)), fillT = Math.pow(t, 1.4);
+  D.k = .62 + .38 * eo(t);
+  D.R = 30 * (1.26 - .26 * eo(t));
+  D.rc = 22 * (.86 + .14 * fillT);
+  D.rh = 19 * (.9 + .1 * fillT);
+  D.L = 44 * (.74 + .26 * t);
+  D.vl = 24 * (.58 + .42 * legT);
+  D.lw = 13 * (1.14 - .14 * t);
+  D.paw = 1.28 - .28 * eo(t);
+  D.ear = 40 * (1.16 - .16 * t); D.earW = 23 * (1.1 - .1 * t);
+  D.tail = 30 * (.6 + .4 * eo(t)); D.tailW = 8 * (.82 + .18 * t);
+  D.ms = .7 + .3 * eo(clamp(t * 1.2, 0, 1));
+  D.eye = 1.32 - .32 * eo(t);
+  D.eyeY = .05 - .11 * eo(t);
+  D.potBelly = .3 * (1 - t);
+  D.cap = .55 * (1 - eo(clamp(t * 1.35, 0, 1)));
+  D.wobble = 1 - eo(clamp(t * 1.6, 0, 1));
+  D.saddleK = 1.15 - .15 * t;
+  return D;
+}
+
+// ---------- 姿势：站、低头闻、坐、趴、下巴搁爪子、摊着、蜷着睡、邀玩、低落 ----------
+function basePose(name, D){
+  const L = D.L, rc = D.rc, rh = D.rh, vl = D.vl;
+  const P = { cx:L / 2, cy:-(vl + rc * .92), hx:-L / 2, hy:-(vl + rh * .98), nA:-62, nL:.55, hr:0,
+    fnx:L / 2 + 2, fny:0, ffx:L / 2 + 9, ffy:0, hnx:-L / 2 - 2, hny:0, hfx:-L / 2 + 5, hfy:0, fl:0,
+    th:.2, tb:-28, tc:6, tf:0, eo:6, eb:0, el:0, bi:0, bu:0, lid:0, lt:0, es:1, gx:0, gy:0 };
+  const lie = () => { P.cy = -rc * .95; P.hy = -rh * .95; P.nA = -48; P.nL = .5; P.fnx = L / 2 + rc * .9 + vl * .9; P.ffx = P.fnx + 7; P.hnx = -L / 2 + rh * 1.1; P.hfx = -L / 2 + rh * .8; P.th = 1; P.tb = -96; P.tc = 2; };
+  switch (name){
+    case 'low': P.cy += 3; P.hy += 4; P.nA = -26; P.nL = .5; P.tb = -165; P.tc = 14; break;
+    case 'sniff': P.nA = 40; P.nL = .8; P.tb = -6; P.tc = 4; break;
+    case 'sit': P.cx = L / 2 - 6; P.cy = -(vl + rc * .92) - rc * .5; P.hx = -L / 2 + 9; P.hy = -rh * .92; P.nA = -76;
+      P.fnx = L / 2 + 1; P.ffx = L / 2 + 8; P.hnx = P.hx + rh * 1.05; P.hfx = P.hx + rh * .7; P.th = 1; P.tb = -100; P.tc = 3; break;
+    case 'lie': lie(); break;
+    case 'chin': lie(); P.nA = 12; P.nL = .42; break;
+    case 'flop': lie(); P.nA = -30; P.nL = .45; P.cy += 1; break;
+    case 'curl': P.cx = L / 2 - 5; P.cy = -rc * .9; P.hx = -L / 2 + 3; P.hy = -rh * .9; P.nA = 28; P.nL = .42; P.hr = 10;
+      P.fnx = L / 2 + rc * .8; P.fny = -1; P.ffx = P.fnx + 5; P.ffy = -1; P.hnx = -L / 2 + rh * 1.2; P.hfx = -L / 2 + rh * .9; P.th = 1; P.tb = -178; P.tc = 30; P.tf = 1; break;
+    case 'bow': P.cy = -rc * 1.0; P.hy = -(vl + rh * .98) - 3; P.nA = -38; P.nL = .5; P.fnx = L / 2 + rc * .9 + vl * .85; P.ffx = P.fnx + 7; P.tb = -12; P.tc = 5; break;
+  }
+  return P;
+}
+function withHD(P, D){ P.hdx = Math.cos(P.nA * D2R) * P.nL * D.R; P.hdy = Math.sin(P.nA * D2R) * P.nL * D.R; return P; }
+function neckBase(P, D){
+  const ch = [P.cx, P.cy], hp = [P.hx, P.hy], fwd = nrm(sub(ch, hp)), up = [fwd[1], -fwd[0]];
+  return add(add(ch, mul(fwd, D.rc * .35)), mul(up, D.rc * .55));
+}
+
+// ---------- 小工具 ----------
+function ik(root, target, a, b){
+  const v = sub(target, root), dir = nrm(v);
+  const d = clamp(len(v), Math.abs(a - b) + .01, a + b - .01);
+  const foot = add(root, mul(dir, d));
+  const al = Math.acos(clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1));
+  const phi = Math.atan2(dir[1], dir[0]) + al;
+  return { joint: add(root, [Math.cos(phi) * a, Math.sin(phi) * a]), foot };
+}
+function hull(c1, r1, c2, r2){
+  const v = sub(c1, c2), d = len(v);
+  if (d <= Math.abs(r1 - r2) + .1) return '';
+  const th = Math.atan2(v[1], v[0]), al = Math.acos(clamp((r2 - r1) / d, -1, 1));
+  const na = [Math.cos(th + al), Math.sin(th + al)], nb = [Math.cos(th - al), Math.sin(th - al)];
+  return `<path d="M${pt(add(c1, mul(na, r1)))} L${pt(add(c1, mul(nb, r1)))} L${pt(add(c2, mul(nb, r2)))} L${pt(add(c2, mul(na, r2)))} Z"/>`;
+}
+const cap = (a, b, w, col, op) => `<path d="M${pt(a)} L${pt(b)}" stroke="${col}" stroke-width="${n(w)}" stroke-linecap="round" fill="none"${op != null ? ` opacity="${op}"` : ''}/>`;
+function ribbon(pts, ws){
+  const Lp = [], Rp = [], N = pts.length;
+  for (let i = 0; i < N; i++){
+    const d = nrm(sub(pts[Math.min(N - 1, i + 1)], pts[Math.max(0, i - 1)])), nn = [-d[1], d[0]];
+    Lp.push(add(pts[i], mul(nn, ws[i] / 2))); Rp.push(sub(pts[i], mul(nn, ws[i] / 2)));
+  }
+  const dl = nrm(sub(pts[N - 1], pts[N - 2])), tip = add(pts[N - 1], mul(dl, ws[N - 1] * .95));
+  let d = `M${pt(Lp[0])}`; for (let i = 1; i < N; i++) d += ` L${pt(Lp[i])}`;
+  d += ` Q${pt(tip)} ${pt(Rp[N - 1])}`; for (let i = N - 2; i >= 0; i--) d += ` L${pt(Rp[i])}`;
+  return d + ' Z';
+}
+function earPath(w, L){
+  return `M${n(-w * .42)},${n(-w * .15)} C${n(-w * .78)},${n(L * .25)} ${n(-w * .66)},${n(L * .86)} ${n(-w * .08)},${n(L)} C${n(w * .32)},${n(L * 1.06)} ${n(w * .6)},${n(L * .78)} ${n(w * .52)},${n(L * .42)} C${n(w * .46)},${n(L * .12)} ${n(w * .36)},${n(-w * .1)} ${n(w * .12)},${n(-w * .26)} C${n(-w * .05)},${n(-w * .32)} ${n(-w * .28)},${n(-w * .28)} ${n(-w * .42)},${n(-w * .15)} Z`;
+}
+function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const KIB = (() => {
+  const r = mulberry(11), arr = [];
+  for (let i = 0; i < 14; i++){ const u = r() * 2 - 1; arr.push({ x:u * (BW / 2 - 8), y:-BH + (r() * 2.6 - .4), rot:r() * 180 }); }
+  for (let i = 0; i < 26; i++){ const u = r() * 2 - 1, m = 8 * (1 - u * u) + 1; arr.push({ x:u * (BW / 2 - 8), y:-BH - .6 - r() * m, rot:r() * 180 }); }
+  return arr.sort((p, q) => q.y - p.y);
+})();
+
+// ---------- 头 ----------
+function eyeSVG(pid, idx, k, ex, ey, re, E){
+  const lw = re * .26;
+  if (E.closed || E.lid >= .93) return `<path d="M${n(ex - re * .95)},${n(ey + re * .05)} Q${n(ex)},${n(ey + re * .75)} ${n(ex + re * .95)},${n(ey + re * .05)}" fill="none" stroke="${C.rim}" stroke-width="${n(lw)}" stroke-linecap="round"/>`;
+  if (E.squint) return `<path d="M${n(ex - re * .95)},${n(ey + re * .35)} Q${n(ex)},${n(ey - re * .75)} ${n(ex + re * .95)},${n(ey + re * .35)}" fill="none" stroke="${C.rim}" stroke-width="${n(lw)}" stroke-linecap="round"/>`;
+  const gx = clamp(E.gx, -2, 2) * re * .2, gy = clamp(E.gy, -2, 2) * re * .18, hk = E.glossy ? 1.22 : 1;
+  let s = `<circle cx="${n(ex)}" cy="${n(ey)}" r="${n(re)}" fill="${C.rim}"/>`;
+  s += `<circle cx="${n(ex + gx * .45)}" cy="${n(ey + gy * .45)}" r="${n(re * .84)}" fill="url(#g-iris)"/>`;
+  s += `<circle cx="${n(ex + gx)}" cy="${n(ey + gy)}" r="${n(re * .47)}" fill="${C.pupil}"/>`;
+  s += `<circle cx="${n(ex - re * .3 + gx * .3)}" cy="${n(ey - re * .32 + gy * .3)}" r="${n(re * .29 * hk)}" fill="#fff"/>`;
+  s += `<circle cx="${n(ex + re * .33 + gx * .2)}" cy="${n(ey + re * .3 + gy * .2)}" r="${n(re * .12 * hk)}" fill="#fff" opacity=".92"/>`;
+  if (E.glossy) s += `<path d="M${n(ex - re * .55)},${n(ey + re * .52)} Q${n(ex)},${n(ey + re * .82)} ${n(ex + re * .55)},${n(ey + re * .52)}" fill="none" stroke="#fff" stroke-width="${n(re * .11)}" stroke-linecap="round" opacity=".55"/>`;
+  if (E.lid > .02){
+    const yc = ey - re + 2 * re * E.lid, tl = E.lt * re * .55;
+    const yL = yc + (k < 0 ? tl : -tl * .35), yR = yc + (k > 0 ? tl : -tl * .35);
+    s += `<g clip-path="url(#${pid}-e${idx})"><path d="M${n(ex - re * 1.3)},${n(ey - re * 1.4)} L${n(ex + re * 1.3)},${n(ey - re * 1.4)} L${n(ex + re * 1.3)},${n(yR)} L${n(ex - re * 1.3)},${n(yL)} Z" fill="${C.tan}"/><path d="M${n(ex - re * 1.3)},${n(yL)} L${n(ex + re * 1.3)},${n(yR)}" stroke="${C.rim}" stroke-width="${n(re * .2)}"/></g>`;
+  }
+  return s;
+}
+
+function headSVG(pid, D, E, t){
+  const R = D.R, fx = R * .09, ms = D.ms;
+  let s = '', defs = `<clipPath id="${pid}-hc"><ellipse cx="0" cy="0" rx="${n(R)}" ry="${n(R * .88)}"/></clipPath>`;
+  const cr = (dx, dy, k, fill) => `<g fill="${fill}"><ellipse cx="${n(dx)}" cy="${n(dy)}" rx="${n(R * k)}" ry="${n(R * .88 * k)}"/><circle cx="${n(dx - .5 * R)}" cy="${n(dy + .33 * R)}" r="${n(.41 * R * k)}"/><circle cx="${n(dx + .5 * R + fx * .6)}" cy="${n(dy + .33 * R)}" r="${n(.41 * R * k)}"/></g>`;
+  s += cr(0, 0, 1, C.tanShade) + cr(-.035 * R, -.045 * R, .955, C.tan);
+  if (D.cap > .01) s += `<g clip-path="url(#${pid}-hc)"><ellipse cx="${n(-.04 * R)}" cy="${n(-.66 * R)}" rx="${n(.9 * R)}" ry="${n(.46 * R)}" fill="${C.tanDeep}" opacity="${n(D.cap)}"/></g>`;
+  s += `<ellipse cx="${n(-.3 * R)}" cy="${n(-.52 * R)}" rx="${n(.28 * R)}" ry="${n(.14 * R)}" transform="rotate(-24 ${n(-.3 * R)} ${n(-.52 * R)})" fill="${C.tanLight}" opacity=".6"/>`;
+  s += `<path d="M${n(fx - .06 * R)},${n(-.83 * R)} Q${n(fx - .085 * R)},${n(-.2 * R)} ${n(fx - .29 * R)},${n(.26 * R)} L${n(fx + .29 * R)},${n(.26 * R)} Q${n(fx + .085 * R)},${n(-.2 * R)} ${n(fx + .06 * R)},${n(-.83 * R)} Z" fill="${C.white}"/>`;
+  const mcy = .43 * R, mrx = .5 * R * ms + .06 * R, mry = .36 * R * ms + .04 * R;
+  s += `<ellipse cx="${n(fx)}" cy="${n(mcy)}" rx="${n(mrx)}" ry="${n(mry)}" fill="${C.white}"/>`;
+  s += `<ellipse cx="${n(fx)}" cy="${n(mcy + mry * .5)}" rx="${n(mrx * .82)}" ry="${n(mry * .42)}" fill="${C.whiteShade}" opacity=".7"/>`;
+  for (const k of [-1, 1]) for (const [ox, oy] of [[.52, -.08], [.68, .1], [.44, .16]])
+    s += `<circle cx="${n(fx + k * mrx * ox)}" cy="${n(mcy + mry * oy)}" r="${n(R * .022)}" fill="${C.freckle}" opacity=".7"/>`;
+  if (E.blush > 0) for (const k of [-1, 1]) s += `<ellipse cx="${n(fx + k * .5 * R)}" cy="${n(.3 * R)}" rx="${n(.13 * R)}" ry="${n(.075 * R)}" fill="${C.blush}" opacity="${n(E.blush)}"/>`;
+  // 耳朵
+  const ew = D.earW * (1 - .12 * E.eb), el = D.ear * (1 - .06 * E.el) * (1 - .05 * E.eb);
+  const ep = earPath(ew, el), ay = -.42 * R - .1 * R * E.el + .04 * R * E.eb, ax = .82 * R;
+  const fold = `<path d="M${n(-ew * .1)},${n(ew * .08)} Q${n(-ew * .32)},${n(el * .45)} ${n(-ew * .08)},${n(el * .78)}" fill="none" stroke="${C.tanDeep}" stroke-width="${n(R * .035)}" stroke-linecap="round" opacity=".35"/>`;
+  const capE = D.cap > .01 ? `<path d="${ep}" fill="${C.saddle}" opacity="${n(D.cap * .55)}"/>` : '';
+  s += `<g transform="translate(${n(-ax + fx * .3)},${n(ay)}) rotate(${n(E.earL)})"><path d="${ep}" fill="url(#g-ear)"/>${capE}${fold}</g>`;
+  s += `<g transform="translate(${n(ax * .97 + fx * .3)},${n(ay)}) rotate(${n(-E.earR)}) scale(-.95,1)"><path d="${ep}" fill="url(#g-ear)"/>${capE}${fold}</g>`;
+  // 眼睛和眉毛
+  const ey = D.eyeY * R, re = .14 * R * D.eye * E.es;
+  [[-1, 0], [1, 1]].forEach(([k, idx]) => {
+    const ex = fx + k * .35 * R;
+    defs += `<clipPath id="${pid}-e${idx}"><circle cx="${n(ex)}" cy="${n(ey)}" r="${n(re * 1.02)}"/></clipPath>`;
+    s += eyeSVG(pid, idx, k, ex, ey, re, E);
+    const by = ey - re * 1.55 - E.bu * .07 * R + E.browTw * .03 * R, inner = -k;
+    s += `<path d="M${n(ex - inner * .085 * R)},${n(by + .012 * R)} L${n(ex + inner * .085 * R)},${n(by - E.bi * .075 * R)}" stroke="${C.brow}" stroke-width="${n(.062 * R)}" stroke-linecap="round" opacity=".85"/>`;
+  });
+  // 鼻子
+  const nw = .19 * R * (1 + .12 * (1 - D.t)), nh = .135 * R, wg = E.wig ? Math.sin(t * 38) : 0;
+  const ny = mcy - mry * .62 + wg * .012 * R;
+  s += `<g transform="translate(${n(fx)},${n(ny)}) scale(${n(1 + wg * .05)},1)"><path d="M${n(-nw)},0 C${n(-nw)},${n(-nh * 1.15)} ${n(nw)},${n(-nh * 1.15)} ${n(nw)},0 C${n(nw)},${n(nh * .8)} ${n(nw * .25)},${n(nh * 1.05)} 0,${n(nh * 1.05)} C${n(-nw * .25)},${n(nh * 1.05)} ${n(-nw)},${n(nh * .8)} ${n(-nw)},0 Z" fill="url(#g-nose)"/><ellipse cx="${n(-nw * .36)}" cy="${n(-nh * .45)}" rx="${n(nw * .3)}" ry="${n(nh * .2)}" fill="#fff" opacity=".6"/></g>`;
+  // 嘴
+  const nb = ny + nh * 1.05, my = mcy + mry * .18, ml = .045 * R;
+  const Ln = d => `<path d="${d}" fill="none" stroke="${C.rim}" stroke-width="${n(ml)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const wc = (wd, dep) => `M${n(fx - wd)},${n(my - .04 * R)} Q${n(fx - wd / 2)},${n(my + dep)} ${n(fx)},${n(my)} Q${n(fx + wd / 2)},${n(my + dep)} ${n(fx + wd)},${n(my - .04 * R)}`;
+  const phil = Ln(`M${n(fx)},${n(nb)} L${n(fx)},${n(my)}`);
+  if (E.mouth === 'pant'){
+    const pb = Math.sin(t * TAU * 2.6), ty = my + .17 * R + .025 * R * pb, tr = .085 * R + .012 * R * pb;
+    s += `<path d="M${n(fx - .12 * R)},${n(my + .005 * R)} Q${n(fx)},${n(my + .36 * R)} ${n(fx + .12 * R)},${n(my + .005 * R)} Z" fill="${C.mouth}"/>`;
+    s += `<ellipse cx="${n(fx)}" cy="${n(ty)}" rx="${n(.08 * R)}" ry="${n(tr)}" fill="${C.tongue}"/><path d="M${n(fx)},${n(ty - tr * .55)} L${n(fx)},${n(ty + tr * .45)}" stroke="${C.tongueShade}" stroke-width="${n(.02 * R)}" stroke-linecap="round"/>`;
+    s += phil + Ln(wc(.17 * R, .06 * R));
+  } else if (E.mouth === 'frown'){
+    s += Ln(`M${n(fx)},${n(nb)} L${n(fx)},${n(my + .02 * R)}`) + Ln(`M${n(fx - .12 * R)},${n(my + .07 * R)} Q${n(fx)},${n(my - .01 * R)} ${n(fx + .12 * R)},${n(my + .07 * R)}`);
+  } else if (E.mouth === 'yawn'){
+    const o = E.mo;
+    s += Ln(`M${n(fx)},${n(nb)} L${n(fx)},${n(my - .02 * R)}`);
+    s += `<ellipse cx="${n(fx)}" cy="${n(my + .13 * R * o)}" rx="${n(R * (.08 + .07 * o))}" ry="${n(R * (.03 + .19 * o))}" fill="${C.mouth}"/><ellipse cx="${n(fx)}" cy="${n(my + .25 * R * o)}" rx="${n(R * .065 * o)}" ry="${n(R * .05 * o)}" fill="${C.tongue}"/>`;
+  } else if (E.mouth === 'chew'){
+    const j = Math.abs(Math.sin(t * TAU * 3.2));
+    s += phil + Ln(wc(.15 * R, .04 * R + .04 * R * j));
+  } else {
+    s += phil + Ln(wc(.17 * R, .06 * R));
+  }
+  if (E.lick >= 0 && E.mouth !== 'yawn'){
+    const k = Math.sin(E.lick * Math.PI), tx = fx + .1 * R * k, ty = my + .02 * R - .13 * R * k;
+    s += `<ellipse cx="${n(tx)}" cy="${n(ty)}" rx="${n(.065 * R)}" ry="${n(.1 * R)}" transform="rotate(${n(35 * k)} ${n(tx)} ${n(ty)})" fill="${C.tongue}"/>`;
+  }
+  return { s, defs, mouth:[fx + .15 * R, my + .05 * R] };
+}
+
+// ---------- 碗 ----------
+function bowlBack(bx, GY, food){
+  const top = GY - BH, rx = BW / 2;
+  let s = `<ellipse cx="${n(bx)}" cy="${top}" rx="${rx}" ry="5.6" fill="${C.bowlRim}"/>`;
+  s += `<ellipse cx="${n(bx)}" cy="${top + .5}" rx="${rx - 3.4}" ry="3.8" fill="${C.bowlInner}"/>`;
+  const cnt = Math.round(food * KIB.length);
+  for (let i = 0; i < cnt; i++){ const k = KIB[i], x = bx + k.x, y = GY + k.y; s += `<ellipse cx="${n(x)}" cy="${n(y)}" rx="2.8" ry="2.2" transform="rotate(${n(k.rot)} ${n(x)} ${n(y)})" fill="${C.kib}"/>`; }
+  return s;
+}
+function bowlFront(bx, GY){
+  const top = GY - BH, rx = BW / 2;
+  return `<path d="M${n(bx - rx)},${top} A${rx},5.6 0 0 0 ${n(bx + rx)},${top} L${n(bx + rx - 6)},${GY} L${n(bx - rx + 6)},${GY} Z" fill="${C.bowl}"/>` +
+    `<path d="M${n(bx - rx + 1.2)},${top + .6} A${rx - 1.2},5 0 0 0 ${n(bx + rx - 1.2)},${top + .6}" fill="none" stroke="${C.bowlRim}" stroke-width="2.2" opacity=".9"/>` +
+    `<path d="M${n(bx - rx + 8)},${top + 8} L${n(bx - rx + 9.5)},${GY - 3}" stroke="#fff" stroke-opacity=".35" stroke-width="2.4" stroke-linecap="round"/>`;
+}
+
+// ---------- 行为 ----------
+const NAMES = { happy:'开心', play:'想玩', curious:'好奇', sniff:'闻闻', bored:'无聊', sad:'委屈', hungry:'饿了', eat:'吃饭', full:'吃撑了', sleepy:'困了', asleep:'睡着' };
+const HINTS = {
+  happy:'到处溜达，吐着舌头喘气，尾巴摇得快，停下来会蹦一下。',
+  play:'前身趴低、屁股撅高，左右蹦，邀你一起玩。',
+  curious:'抬起一只前爪，歪头，耳朵根往上提。',
+  sniff:'比格的老本行：鼻子贴地慢慢走，尾巴竖着摇。',
+  bored:'下巴搁在爪子上，眼睛转来转去，时不时叹口气、拍两下尾巴。',
+  sad:'耳朵往后贴，尾巴夹起来，眼睛湿湿地抬眼看你。',
+  hungry:'走到碗边坐下，看看碗再看看你，舔嘴，偶尔扒拉一下碗。',
+  eat:'低头吃，碗里的粮一粒粒变少，肚子跟着鼓起来。',
+  full:'走开几步趴下，肚子圆滚滚，慢慢眨眼、舔嘴。',
+  sleepy:'坐着打瞌睡，头一点一点往下掉，打哈欠。',
+  asleep:'蜷成一团，呼吸变慢，偶尔做梦蹬腿、耳朵抖一下。'
+};
+const NEXT = { happy:[['curious', 2], ['sniff', 3], ['play', 2], ['bored', 2]], play:[['happy', 3], ['bored', 1]], curious:[['happy', 2], ['sniff', 2]],
+  sniff:[['happy', 2], ['curious', 1], ['bored', 1]], bored:[['sleepy', 2], ['happy', 1], ['sad', .6]], sad:[['bored', 1], ['happy', 1]],
+  full:[['sleepy', 1]], sleepy:[['asleep', 1]], asleep:[['happy', 1]] };
+const DUR = { happy:[9, 15], play:[5, 8], curious:[5, 8], sniff:[8, 13], bored:[8, 12], sad:[6, 9], full:[9, 13], sleepy:[7, 10], asleep:[14, 20], hungry:[16, 20] };
+const pick = list => { let s = 0; for (const [, w] of list) s += w; let r = Math.random() * s; for (const [k, w] of list){ if ((r -= w) <= 0) return k; } return list[0][0]; };
+
+function newDog(o){
+  return { pid:o.pid, x:o.x, facing:1, faceS:1, months:o.months, state:'happy', auto:!!o.auto, mini:!!o.mini, belly:o.belly ?? .45,
+    t:rand(0, 6), stateT:0, stateDur:12, cur:null, X:null, ev:{}, walk:{ target:null, pause:1, moving:false, phase:0 }, walkBlend:0,
+    ears:{ la:6, lv:0, ra:6, rv:0 }, prevH:null, vH:[0, 0], wagA:10, wagPh:0, brPh:0, puffs:[], puffReq:false, eatPhase:'', lickT:0, onChange:null };
+}
+function setState(dog, s, W){
+  dog.state = s; dog.stateT = 0;
+  const r = DUR[s] || [8, 12]; dog.stateDur = rand(r[0], r[1]);
+  dog.walk.target = null; dog.walk.pause = 0;
+  if (s === 'eat') dog.eatPhase = 'walk';
+  if (s === 'full') dog.walk.target = clamp(dog.x - rand(80, 120), W.minX, W.maxX);
+  if (dog.onChange) dog.onChange();
+}
+function autoStep(dog, W){
+  if (dog.state === 'eat') return;
+  if (dog.belly < .12 && !['hungry', 'asleep', 'sad'].includes(dog.state)){ setState(dog, 'hungry', W); return; }
+  if (dog.stateT > dog.stateDur){
+    if (dog.state === 'hungry'){ setState(dog, 'sad', W); return; }
+    if (dog.state === 'sad' && dog.belly < .12){ setState(dog, 'hungry', W); return; }
+    setState(dog, pick(NEXT[dog.state] || [['happy', 1]]), W);
+  }
+}
+function walkTo(dog, tx, speed, dt){
+  const dx = tx - dog.x;
+  if (Math.abs(dx) < 1.5) return true;
+  dog.facing = dx > 0 ? 1 : -1;
+  if (Math.abs(dog.faceS - dog.facing) > .6) return false;
+  dog.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+  dog.walk.moving = true; dog.walk.speed = speed;
+  return false;
+}
+function wander(dog, speed, pr, W, dt){
+  const w = dog.walk;
+  if (w.pause > 0){ w.pause -= dt; return false; }
+  if (w.target == null){ let tx, k = 0; do { tx = rand(W.minX, W.maxX); } while (Math.abs(tx - dog.x) < 70 && ++k < 8); w.target = tx; }
+  if (walkTo(dog, w.target, speed, dt)){ w.target = null; w.pause = rand(pr[0], pr[1]); return false; }
+  return true;
+}
+const since = (dog, key) => dog.t - (dog.ev[key] ?? -99);
+function every(dog, key, a, b){
+  const at = key + 'At';
+  if (dog.ev[at] == null){ dog.ev[at] = dog.t + rand(a, b) * .5; return; }
+  if (dog.t > dog.ev[at]){ dog.ev[key] = dog.t; dog.ev[at] = dog.t + rand(a, b); }
+}
+
+function behave(dog, D, W, dt){
+  const t = dog.t, B = { pose:'stand', ov:{}, rate:6 };
+  const X = { mouth:'smile', mo:0, lick:-1, wig:0, blush:.35, glossy:false, squint:false, closed:false, offX:0, rootY:0, headDy:0, hrAdd:0,
+    wagA:6, wagF:1.5, breathF:.45, breathA:1, lidAdd:0, paddle:0, zs:false, browTw:0, still:true };
+  const kk = W.k0 * D.k;
+  if (dog.mini){ B.ov.tb = -22; B.ov.eo = 8; X.mouth = 'pant'; X.wagA = 22; X.wagF = 3; X.blush = .5; X.offX = Math.sin(t * TAU * .7) * 1.4 * D.wobble; return { B, X }; }
+  switch (dog.state){
+    case 'happy': {
+      const moving = wander(dog, 36, [1.4, 3.6], W, dt);
+      X.mouth = 'pant'; X.wagA = 24; X.wagF = 3; B.ov.tb = -22; B.ov.eo = 8; X.blush = .55;
+      if (!moving) every(dog, 'hop', 2.6, 5.5);
+      const hp = since(dog, 'hop') / .42;
+      if (hp >= 0 && hp <= 1){ X.rootY = Math.sin(Math.PI * hp) * 7 * (1 + .4 * D.wobble) * AMP; X.squint = hp > .15 && hp < .85; }
+      X.still = !moving; break;
+    }
+    case 'play': {
+      B.pose = 'bow'; X.offX = 9 * Math.sin(t * TAU * .8) * AMP; X.rootY = Math.abs(Math.sin(t * TAU * .8)) * 3 * AMP;
+      X.mouth = 'pant'; X.wagA = 30; X.wagF = 4.2; B.ov.eo = 14; B.ov.el = .35; B.ov.es = 1.06; B.ov.bu = .6; X.blush = .6; X.still = false; break;
+    }
+    case 'curious': {
+      B.ov.fl = 1; B.ov.hr = 13 * (Math.sin(t * TAU / 3.6) > 0 ? 1 : -1); B.ov.el = .75; B.ov.eo = 3; B.ov.bu = .8; B.ov.es = 1.08; B.ov.tb = -30;
+      X.wagA = 7; X.wagF = 1.6; every(dog, 'sniff', 1.8, 3.2); X.wig = since(dog, 'sniff') < .7 ? 1 : 0; break;
+    }
+    case 'sniff': {
+      X.still = !wander(dog, 14, [.5, 1.3], W, dt);
+      B.pose = 'sniff'; X.wig = 1; B.ov.lid = .3; B.ov.gy = 1.3; B.ov.eo = -5; X.wagA = 9; X.wagF = 3.4; break;
+    }
+    case 'bored': {
+      B.pose = 'chin'; B.ov.lid = .42; B.ov.gx = 1.3 * Math.sin(t * .55); B.ov.eo = 24; X.wagA = 0;
+      every(dog, 'sigh', 5, 8); const sp = since(dog, 'sigh');
+      if (sp === 0) dog.puffReq = true;
+      if (sp < 1.4){ X.breathA = 1 + 2.2 * Math.sin(Math.PI * sp / 1.4); if (sp > .5 && sp < 1.2) X.lidAdd = .4; }
+      every(dog, 'thump', 4, 9); if (since(dog, 'thump') < .9){ X.wagA = 16; X.wagF = 2.4; }
+      break;
+    }
+    case 'sad': {
+      B.pose = 'low'; B.ov.eb = 1; B.ov.lt = .85; B.ov.lid = .18; B.ov.bi = 1; B.ov.es = 1.12; B.ov.gy = -1.1; B.rate = 3.5;
+      X.glossy = true; X.mouth = 'frown'; X.wagA = 0; X.blush = .2;
+      every(dog, 'sigh', 6, 9); const sp = since(dog, 'sigh'); if (sp === 0) dog.puffReq = true; if (sp < 1.4) X.breathA = 1 + 2 * Math.sin(Math.PI * sp / 1.4);
+      every(dog, 'look', 4, 7); if (since(dog, 'look') < 1.6){ B.ov.gx = -1.6; B.ov.gy = .6; B.ov.hr = -6; }
+      break;
+    }
+    case 'hungry': {
+      const P = withHD(basePose('sit', D), D), hc = add(neckBase(P, D), [P.hdx, P.hdy]);
+      const tx = W.bowlX - ((hc[0] + D.R) * kk + BW / 2 - 8);
+      if (!walkTo(dog, tx, 42, dt)){ X.wagA = 10; X.wagF = 2; X.still = false; break; }
+      dog.facing = 1;
+      B.pose = 'sit'; B.ov.bi = .85; B.ov.es = 1.06; X.wagA = 14; X.wagF = 1.2;
+      if (Math.sin(t * TAU / 4.4) > 0){ B.ov.gx = 1.7; B.ov.gy = 1.3; B.ov.hr = 6; } else { B.ov.gx = 0; B.ov.gy = -.2; B.ov.hr = -10; }
+      every(dog, 'lick', 2.2, 3.8); const lp = since(dog, 'lick') / .6; if (lp >= 0 && lp <= 1) X.lick = lp;
+      every(dog, 'paw', 5, 8); if (since(dog, 'paw') < .9) B.ov.fl = .85;
+      break;
+    }
+    case 'eat': {
+      const P0 = withHD(basePose('stand', D), D), N = neckBase(P0, D);
+      const hx = N[0] + D.R * .5, rim = -BH / kk, hy = rim - (.43 * D.R + .36 * D.R * D.ms + .04 * D.R) + 3 / kk;
+      const tx = W.bowlX - (hx + .09 * D.R) * kk;
+      if (dog.eatPhase === 'walk'){
+        X.wagA = 18; X.wagF = 2.6; X.still = false;
+        if (walkTo(dog, tx, 46, dt)){ dog.facing = 1; if (Math.abs(dog.faceS - 1) < .1) dog.eatPhase = 'eat'; }
+        break;
+      }
+      if (dog.eatPhase === 'eat'){
+        B.ov.hdx = hx - N[0]; B.ov.hdy = hy - N[1]; B.ov.lid = .4; B.ov.eo = 2; B.rate = 7; X.mouth = 'chew'; X.wagA = 20; X.wagF = 2.6;
+        if (dog.cur && Math.abs(dog.cur.hdy - B.ov.hdy) < 3){
+          X.headDy = Math.sin(t * TAU * 3.2) * .035 * D.R;
+          const d = Math.min(W.food, dt * .17); W.food -= d; dog.belly = Math.min(1, dog.belly + d * .8);
+          if (W.food <= 0){ W.food = 0; dog.eatPhase = 'lick'; dog.lickT = 0; }
+        }
+        break;
+      }
+      dog.lickT += dt; X.lick = Math.min(1, dog.lickT); X.wagA = 20; X.wagF = 2.8; B.ov.gy = -.3;
+      if (dog.lickT > 1.3) setState(dog, dog.belly > .6 ? 'full' : 'happy', W);
+      break;
+    }
+    case 'full': {
+      if (dog.walk.target != null){ X.still = false; if (walkTo(dog, dog.walk.target, 24, dt)) dog.walk.target = null; break; }
+      B.pose = 'flop'; B.ov.lid = .5; X.blush = .6; X.wagA = 6; X.wagF = .6; X.breathF = .32; X.breathA = 1.6;
+      every(dog, 'lick', 4, 7); const lp = since(dog, 'lick') / .6; if (lp >= 0 && lp <= 1) X.lick = lp;
+      X.squint = Math.sin(t * .6) > .72; break;
+    }
+    case 'sleepy': {
+      B.pose = 'sit'; B.ov.eo = -4; X.wagA = 0; B.rate = 4;
+      const cyc = (t % 4.2) / 4.2, p = cyc < .82 ? cyc / .82 : 1 - (cyc - .82) / .18, pe = p * p * (3 - 2 * p);
+      X.headDy = pe * .22 * D.R; B.ov.lid = .5;  X.lidAdd = .42 * pe;
+      every(dog, 'yawn', 5, 8); const yp = since(dog, 'yawn') / 1.8;
+      if (yp >= 0 && yp <= 1){ const o = Math.sin(Math.PI * yp); X.mouth = 'yawn'; X.mo = o; X.closed = o > .3; X.hrAdd = -8 * o; X.headDy *= (1 - o); }
+      break;
+    }
+    case 'asleep': {
+      B.pose = 'curl'; X.closed = true; X.breathF = .22; X.breathA = 2.2; X.zs = true; X.wagA = 0; X.blush = .4; B.rate = 3;
+      every(dog, 'dream', 7, 11); const dp = since(dog, 'dream');
+      if (dp < 2.4){ const e = Math.sin(Math.PI * dp / 2.4); X.paddle = Math.sin(dp * TAU * 3.2) * e; X.browTw = Math.sin(dp * TAU * 2.1) * .5 * e; X.wagA = 5; X.wagF = 3; }
+      break;
+    }
+  }
+  if (X.still && !['play', 'eat'].includes(dog.state) && X.rootY === 0) X.offX += Math.sin(t * TAU * .7) * 1.5 * D.wobble;
+  return { B, X };
+}
+
+const POSE_KEYS = Object.keys(withHD(basePose('stand', dims(7)), dims(7))).filter(k => k !== 'tf');
+function updateDog(dog, W, dt){
+  dog.t += dt; dog.stateT += dt;
+  if (!dog.mini && dog.state !== 'eat') dog.belly = Math.max(0, dog.belly - dt / (dog.state === 'asleep' ? 240 : 115));
+  if (dog.auto && !dog.mini) autoStep(dog, W);
+  const D = dims(dog.months);
+  dog.walk.moving = false;
+  const { B, X } = behave(dog, D, W, dt);
+  // 眨眼、耳朵抖
+  every(dog, 'blink', 2.4, 5.6);
+  if (since(dog, 'blink') === 0 && Math.random() < .15) dog.ev.blinkAt = dog.t + .3;
+  const bp = since(dog, 'blink'); X.blink = bp < .16 ? 1 - Math.abs(bp - .08) / .08 : 0;
+  every(dog, 'twitch', 4, 9); if (since(dog, 'twitch') === 0){ if (Math.random() < .5) dog.ears.lv += 320; else dog.ears.rv += 320; }
+  dog.X = X;
+  const tgt = basePose(B.pose, D); Object.assign(tgt, B.ov);
+  if (B.ov.hdx == null) withHD(tgt, D);
+  if (!dog.cur) dog.cur = { ...tgt };
+  const r = 1 - Math.exp(-dt * B.rate);
+  for (const k of POSE_KEYS) dog.cur[k] += (tgt[k] - dog.cur[k]) * r;
+  dog.cur.tf = tgt.tf;
+  const kk = W.k0 * D.k;
+  if (dog.walk.moving) dog.walk.phase += dt * dog.walk.speed / (kk * D.lw * .45);
+  dog.walkBlend += ((dog.walk.moving ? 1 : 0) - dog.walkBlend) * Math.min(1, dt * 8);
+  dog.faceS += (dog.facing - dog.faceS) * Math.min(1, dt * 12);
+  dog.wagA += (X.wagA * AMP - dog.wagA) * Math.min(1, dt * 4);
+  dog.wagPh += dt * TAU * X.wagF; dog.brPh += dt * TAU * X.breathF;
+}
+
+// ---------- 画一只狗 ----------
+function renderDog(dog, W, dt){
+  const D = dims(dog.months), P = dog.cur, X = dog.X, pid = dog.pid, t = dog.t;
+  const kk = W.k0 * D.k, br = Math.sin(dog.brPh) * X.breathA * AMP;
+  const wb = dog.walkBlend, ph = dog.walk.phase;
+  const bob = -Math.abs(Math.sin(ph)) * 1.3 * wb * (1 + .6 * D.wobble);
+  const ch = [P.cx, P.cy + bob], hp = [P.hx, P.hy + bob];
+  const fwd = nrm(sub(ch, hp)), up = [fwd[1], -fwd[0]], dn = [-up[0], -up[1]];
+  const rc = D.rc * (1 + .02 * br), rh = D.rh * (1 + .01 * br), sa = Math.atan2(fwd[1], fwd[0]) / D2R;
+  const bc = add(add(mul(add(ch, hp), .5), mul(fwd, D.L * .06)), mul(dn, rc * .42));
+  const brx = D.L * .42 + rc * .32;
+  let bry = rc * (.5 + .55 * dog.belly + D.potBelly) * (1 + .025 * br);
+  bry = Math.max(rc * .2, Math.min(bry, -bc[1] - .5));
+  const shapes = `<circle cx="${n(ch[0])}" cy="${n(ch[1])}" r="${n(rc)}"/><circle cx="${n(hp[0])}" cy="${n(hp[1])}" r="${n(rh)}"/>${hull(ch, rc, hp, rh)}<ellipse cx="${n(bc[0])}" cy="${n(bc[1])}" rx="${n(brx)}" ry="${n(bry)}" transform="rotate(${n(sa)} ${pt(bc)})"/>`;
+  // 脖子和头的位置
+  const N = add(add(ch, mul(fwd, rc * .35)), mul(up, rc * .55));
+  const hc = add(N, [P.hdx, P.hdy + X.headDy]); hc[1] = Math.min(hc[1], -D.R * .86);
+  const hr = P.hr + X.hrAdd;
+  // 腿
+  const lw = D.lw, lwf = lw * .92, pawK = D.paw;
+  const fRoot = add(add(ch, mul(fwd, rc * .2)), mul(dn, rc * .4)), hRoot = add(add(hp, mul(fwd, -rh * .05)), mul(dn, rh * .4));
+  const Lf = (D.vl + rc * .52) * 1.03, Lh = (D.vl + rh * .58) * 1.05;
+  const stride = lw * .8 * wb, lift = lw * .5 * wb, pad = X.paddle * lw * .35;
+  const off = o => [Math.sin(ph + o) * stride, -Math.max(0, Math.cos(ph + o)) * lift];
+  const legs = [
+    { r:hRoot, f:add([P.hfx + pad, P.hfy - lwf * .5], off(0)), L:Lh, w:lwf, col:C.shade, near:false },
+    { r:fRoot, f:add([P.ffx - pad, P.ffy - lwf * .5], off(Math.PI)), L:Lf, w:lwf, col:C.shade, near:false },
+    { r:hRoot, f:add([P.hnx - pad, P.hny - lw * .5], off(Math.PI)), L:Lh, w:lw, col:C.white, near:true },
+    { r:fRoot, f:add([P.fnx + pad, P.fny - lw * .5], off(0)), L:Lf, w:lw, col:C.white, near:true, front:true }
+  ];
+  let legSVG = '';
+  for (const g of legs){
+    let { joint, foot } = ik(g.r, g.f, g.L / 2, g.L / 2);
+    if (g.front && P.fl > .01){
+      const j2 = add(g.r, mul(rot([0, 1], -70 * P.fl * D2R), g.L / 2));
+      const f2 = add(j2, mul(rot([0, 1], 25 * P.fl * D2R), g.L / 2 * .9));
+      joint = lv(joint, j2, P.fl); foot = lv(foot, f2, P.fl);
+    }
+    legSVG += `<path d="M${pt(g.r)} L${pt(joint)} L${pt(foot)}" fill="none" stroke="${g.col}" stroke-width="${n(g.w)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const prx = g.w * .6 * pawK, pry = g.w * .38 * pawK, pc = [foot[0] + g.w * .2, foot[1] + g.w * .5 - pry];
+    legSVG += `<ellipse cx="${n(pc[0])}" cy="${n(pc[1])}" rx="${n(prx)}" ry="${n(pry)}" fill="${g.col}"/>`;
+    if (g.near) for (const ox of [.18, .52]) legSVG += `<path d="M${n(pc[0] + prx * ox)},${n(pc[1] - pry * .05)} L${n(pc[0] + prx * ox)},${n(pc[1] + pry * .65)}" stroke="${C.whiteShade}" stroke-width="${n(g.w * .07)}" stroke-linecap="round"/>`;
+  }
+  // 尾巴：一节一节跟着摆
+  const tBase = add(add(hp, mul(fwd, -rh * .72)), mul(up, rh * .5));
+  const Nt = 10, segL = D.tail / Nt, pts = [tBase], ws = [D.tailW * 1.15];
+  let p = tBase;
+  for (let i = 0; i < Nt; i++){
+    const a = (P.tb + P.tc * i + dog.wagA * Math.sin(dog.wagPh - i * .55)) * D2R, w = lerp(D.tailW * 1.15, D.tailW * .5, (i + 1) / Nt);
+    p = add(p, [Math.sin(a) * segL, -Math.cos(a) * segL]); p = [p[0], Math.min(p[1], -w * .5)];
+    pts.push(p); ws.push(w);
+  }
+  const k0 = Math.round(Nt * .62);
+  const tail = `<path d="${ribbon(pts, ws)}" fill="${C.saddle}"/><path d="${ribbon(pts.slice(k0), ws.slice(k0))}" fill="${C.white}"/>`;
+  // 身上的花色
+  let patch = cap(add(ch, mul(dn, rc * .3)), add(hp, mul(dn, rh * .3)), rc * .55, C.tanShade, .45);
+  patch += cap(add(add(ch, mul(dn, rc * .9)), mul(fwd, rc * .15)), add(hp, mul(dn, rh)), rc * .95, C.white);
+  const wbC = add(bc, mul(dn, bry * .3));
+  patch += `<ellipse cx="${n(wbC[0])}" cy="${n(wbC[1])}" rx="${n(brx * .95)}" ry="${n(bry * .75)}" transform="rotate(${n(sa)} ${pt(wbC)})" fill="${C.white}"/>`;
+  if (D.t < .95){ const pc = add(bc, mul(dn, bry * .35)); patch += `<ellipse cx="${n(pc[0])}" cy="${n(pc[1])}" rx="${n(brx * .55)}" ry="${n(bry * .5)}" transform="rotate(${n(sa)} ${pt(pc)})" fill="#F7C3B8" opacity="${n(.55 * (1 - D.t))}"/>`; }
+  const sc = add(bc, mul(dn, bry * .62));
+  patch += `<ellipse cx="${n(sc[0])}" cy="${n(sc[1])}" rx="${n(brx * .85)}" ry="${n(bry * .42)}" transform="rotate(${n(sa)} ${pt(sc)})" fill="${C.whiteShade}" opacity=".75"/>`;
+  const bib = add(add(ch, mul(fwd, rc * .62)), mul(dn, rc * .12));
+  patch += `<circle cx="${n(bib[0])}" cy="${n(bib[1])}" r="${n(rc * .6)}" fill="${C.white}"/>`;
+  patch += cap(add(add(ch, mul(up, rc * .62)), mul(fwd, -rc * .2)), add(add(hp, mul(up, rh * .58)), mul(fwd, -rh * .15)), rc * 1.18 * D.saddleK, C.saddle);
+  patch += cap(add(add(ch, mul(up, rc * .98)), mul(fwd, -rc * .35)), add(add(hp, mul(up, rh * .95)), mul(fwd, -rh * .1)), rc * .16, C.saddleLight, .7);
+  // 后腿大腿
+  const th = P.th, trx = rh * (.6 + .28 * th), tryy = rh * (.72 + .18 * th);
+  const tcc = add(add(hp, mul(fwd, rh * (.08 + .12 * th))), mul(dn, rh * (.05 + .14 * th))); tcc[1] = Math.min(tcc[1], -tryy * .98);
+  const thigh = `<g transform="rotate(${n(sa - 12 * th)} ${pt(tcc)})"><ellipse cx="${n(tcc[0])}" cy="${n(tcc[1])}" rx="${n(trx)}" ry="${n(tryy)}" fill="${C.tanShade}"/><ellipse cx="${n(tcc[0] - trx * .06)}" cy="${n(tcc[1] - tryy * .07)}" rx="${n(trx * .93)}" ry="${n(tryy * .9)}" fill="${C.tan}"/></g>`;
+  // 脖子
+  const nEnd = lv(N, hc, .8), nv = nrm(sub(nEnd, N)), nn = [-nv[1], nv[0]];
+  const neck = cap(N, nEnd, D.R * .7, C.tan) + cap(add(N, mul(nn, D.R * .18)), add(nEnd, mul(nn, D.R * .18)), D.R * .3, C.white);
+  // 耳朵弹簧：跟着头的加速度甩，头歪了耳朵还是往下垂
+  const fs = Math.sign(dog.faceS) || 1, fsc = fs * Math.max(.04, Math.abs(dog.faceS));
+  const ox = dog.x + X.offX, oy = W.GY - X.rootY;
+  const hcCard = [ox + fsc * hc[0] * kk, oy + hc[1] * kk];
+  const sdt = Math.max(dt, 1 / 120);
+  if (!dog.prevH) dog.prevH = hcCard;
+  const v = [(hcCard[0] - dog.prevH[0]) / sdt, (hcCard[1] - dog.prevH[1]) / sdt];
+  const acc = [clamp((v[0] - dog.vH[0]) / sdt, -2500, 2500), clamp((v[1] - dog.vH[1]) / sdt, -2500, 2500)];
+  dog.prevH = hcCard; dog.vH = v;
+  const axL = acc[0] * fs, Ez = dog.ears, etg = P.eo + 16 * P.eb + 6 * P.el;
+  Ez.lv += (-150 * (Ez.la - etg) - 10 * Ez.lv + (-axL * .9 + acc[1] * 1.1) * 3.5) * sdt; Ez.la = clamp(Ez.la + Ez.lv * sdt, -30, 55);
+  Ez.rv += (-150 * (Ez.ra - etg) - 10 * Ez.rv + (axL * .9 + acc[1] * 1.1) * 3.5) * sdt; Ez.ra = clamp(Ez.ra + Ez.rv * sdt, -30, 55);
+  const E = { lid:clamp(Math.max(P.lid + X.lidAdd, X.blink), 0, 1), lt:P.lt, es:P.es, gx:P.gx, gy:P.gy, bi:P.bi, bu:P.bu, eb:P.eb, el:P.el,
+    squint:X.squint, closed:X.closed, mouth:X.mouth, mo:X.mo, lick:X.lick, wig:X.wig, blush:X.blush, glossy:X.glossy, browTw:X.browTw,
+    earL:Ez.la - hr, earR:Ez.ra + hr };
+  const H = headSVG(pid, D, E, t);
+  // 组装
+  const T = `translate(${n(ox)},${n(oy)}) scale(${Math.round(fsc * kk * 1000) / 1000},${Math.round(kk * 1000) / 1000})`;
+  const shX = ox + fsc * ((ch[0] + hp[0]) / 2) * kk, shR = (D.L / 2 + D.rc) * 1.15 * kk * (1 - X.rootY / 40);
+  let out = `<defs><clipPath id="${pid}-bc">${shapes}</clipPath>${H.defs}</defs>`;
+  out += `<ellipse cx="${n(shX)}" cy="${W.GY + 1}" rx="${n(shR)}" ry="4" style="fill:var(--shadow)"/>`;
+  out += `<g transform="${T}">${P.tf ? '' : tail}${legSVG}<g fill="${C.tan}">${shapes}</g><g clip-path="url(#${pid}-bc)">${patch}</g>${thigh}${P.tf ? tail : ''}${neck}</g>`;
+  if (W.bowl) out += bowlBack(W.bowlX, W.GY, W.food);
+  out += `<g transform="${T}"><g transform="translate(${pt(hc)}) rotate(${n(hr)})">${H.s}</g></g>`;
+  if (W.bowl) out += bowlFront(W.bowlX, W.GY);
+  // 叹气的小气团、睡觉的 Z
+  const hrad = hr * D2R, mLoc = add(hc, rot(H.mouth, hrad));
+  if (dog.puffReq){ dog.puffs.push({ t0:t, x:ox + fsc * mLoc[0] * kk, y:oy + mLoc[1] * kk, d:fs }); dog.puffReq = false; }
+  dog.puffs = dog.puffs.filter(q => t - q.t0 < 1.4);
+  for (const q of dog.puffs){
+    const a = (t - q.t0) / 1.4, x = q.x + q.d * a * 16, y = q.y - a * 8, r = 2.5 + a * 4.5, op = n((1 - a) * .9);
+    out += `<g style="fill:var(--puff)" opacity="${op}"><circle cx="${n(x)}" cy="${n(y)}" r="${n(r)}"/><circle cx="${n(x + q.d * r * .9)}" cy="${n(y - r * .3)}" r="${n(r * .75)}"/><circle cx="${n(x + q.d * r * .4)}" cy="${n(y + r * .45)}" r="${n(r * .6)}"/></g>`;
+  }
+  if (X.zs){
+    const zx = ox + fsc * (hc[0] + D.R * .7) * kk, zy = oy + (hc[1] - D.R * .9) * kk;
+    for (let i = 0; i < 3; i++){
+      const q = (t * .42 + i / 3) % 1, sz = 4 + q * 5, x = zx + fs * q * 16, y = zy - q * 26;
+      out += `<path d="M${n(x)},${n(y)} h${n(sz)} l${n(-sz)},${n(sz)} h${n(sz)}" fill="none" style="stroke:var(--zcol)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="${n(Math.sin(q * Math.PI))}"/>`;
+    }
+  }
+  return out;
+}
+
+// ---------- 舞台 ----------
+const MAIN = { k0:1.15, GY:200, bowl:true, bowlX:505, food:.5, minX:70, maxX:420 };
+const dog = newDog({ pid:'m', x:230, months:7, auto:true, belly:.45 });
+const mainDyn = document.getElementById('mainDyn'), mainStage = document.getElementById('mainStage');
+const minis = [...document.querySelectorAll('.gdyn')].map((el, i) => ({ el, W:{ k0:.95, GY:140, bowl:false }, dog:newDog({ pid:'g' + i, x:92, months:+el.dataset.m, mini:true }) }));
+
+const chips = document.getElementById('chips'), autoBtn = document.getElementById('auto'), feedBtn = document.getElementById('feed');
+const stName = document.getElementById('stName'), stMode = document.getElementById('stMode'), stHint = document.getElementById('stHint');
+function syncUI(){
+  chips.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === dog.state ? 'true' : 'false'));
+  autoBtn.setAttribute('aria-pressed', dog.auto ? 'true' : 'false');
+  stName.textContent = NAMES[dog.state]; stMode.textContent = dog.auto ? '自由活动中' : '你选的状态';
+  stHint.textContent = HINTS[dog.state] || '';
+  feedBtn.disabled = dog.state === 'eat';
+}
+dog.onChange = syncUI;
+chips.addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  const s = b.dataset.s; dog.auto = false;
+  if (s === 'full') dog.belly = Math.max(dog.belly, .8);
+  if (s === 'hungry') dog.belly = Math.min(dog.belly, .08);
+  setState(dog, s, MAIN);
+});
+autoBtn.addEventListener('click', () => { dog.auto = !dog.auto; if (dog.auto) dog.stateT = Math.min(dog.stateT, dog.stateDur - 2); syncUI(); });
+feedBtn.addEventListener('click', () => { MAIN.food = 1; setState(dog, 'eat', MAIN); });
+const ageEl = document.getElementById('age'), ageVal = document.getElementById('ageVal');
+const fmtAge = m => m >= 12 ? '12 个月 · 成年' : m <= 2 ? '2 个月 · 刚到家' : m === 6 ? '6 个月 · 青春期' : `${m} 个月`;
+ageEl.addEventListener('input', () => { dog.months = +ageEl.value; ageVal.textContent = fmtAge(dog.months); });
+function bindSeg(id, fn){
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); fn(b.dataset.v); });
+}
+bindSeg('bg', v => document.querySelectorAll('.stage').forEach(s => { s.classList.remove('bg-light', 'bg-dark', 'bg-busy'); s.classList.add('bg-' + v); }));
+bindSeg('size', v => mainStage.classList.toggle('small', v === 'small'));
+
+let last = performance.now(), acc = 0;
+function frame(now){
+  const dt = Math.min(.05, (now - last) / 1000); last = now; acc += dt;
+  if (acc >= 1 / 30){
+    updateDog(dog, MAIN, acc); mainDyn.innerHTML = renderDog(dog, MAIN, acc);
+    for (const m of minis){ updateDog(m.dog, m.W, acc); m.el.innerHTML = renderDog(m.dog, m.W, acc); }
+    acc = 0;
+  }
+  requestAnimationFrame(frame);
+}
+updateDog(dog, MAIN, 1 / 30); mainDyn.innerHTML = renderDog(dog, MAIN, 1 / 30);
+for (const m of minis){ updateDog(m.dog, m.W, 1 / 30); m.el.innerHTML = renderDog(m.dog, m.W, 1 / 30); }
+syncUI();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

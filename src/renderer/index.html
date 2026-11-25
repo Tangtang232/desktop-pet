@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>桌面比格</title>
+  <style>
+    :root {
+      --paper: #FFF8EA; --paper-edge: #E9D9BC; --ink: #4A3426; --ink-soft: #8A6F5A; --accent: #B5652A; --accent-ink: #FFFFFF;
+      --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; font-family: var(--font); }
+    body.smoke { background: #D6DEE6; }
+    /* 舞台和工作区一样高、贴着窗口底边；窗口平时只露出底部一条 */
+    #stage { position: fixed; left: 0; right: 0; bottom: 0; height: 100%; }
+    /* 画布只有露在窗口里的那么高，贴着底边（高度由脚本设） */
+    #stage canvas { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; display: block; }
+    /* 展开的纸条 */
+    #noteCard {
+      position: absolute; z-index: 5; width: 260px; box-sizing: border-box; padding: 14px 16px 12px;
+      background: var(--paper); color: var(--ink); border: 1.5px solid var(--paper-edge); border-radius: 14px;
+      box-shadow: 0 10px 26px rgba(60, 40, 20, .25); transform-origin: 50% 100%; animation: unfold .22s ease-out;
+      background-image: repeating-linear-gradient(transparent 0 27px, rgba(181, 101, 42, .08) 27px 28px);
+    }
+    #noteCard[hidden] { display: none; }
+    #noteText { font-size: 15px; line-height: 28px; white-space: pre-wrap; word-break: break-word; user-select: text; }
+    #noteFrom { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
+    #noteClose { margin-top: 10px; float: right; font: 600 13px var(--font); border: 0; border-radius: 9px; padding: 4px 14px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+    #noteClose:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @keyframes unfold { from { transform: scale(.6) rotate(-4deg); opacity: 0; } to { transform: none; opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { #noteCard { animation: none; } }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <canvas id="ov"></canvas>
+    <div id="noteCard" hidden>
+      <div id="noteText"></div>
+      <div id="noteFrom"></div>
+      <button type="button" id="noteClose">收好</button>
+    </div>
+  </div>
+  <script src="../../assets/beagle/puppy/rig-data.js"></script>
+  <script src="rig.js"></script>
+  <script src="logic.js"></script>
+  <script src="pet.js"></script>
+</body>
+</html>

@@ -1,0 +1,552 @@
+<title>比格画风打样</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: 顶部一条控制台，下面 2×2 画风卡片（窄屏单列）；每张卡片底部是一段模拟的桌面任务栏 */
+:root{
+  --bg:#EEF0ED; --surface:#FFFFFF; --fg:#1D2220; --muted:#5B645F; --line:#D5DAD5;
+  --accent:#A65A1F; --accent-fg:#FFFFFF; --chip:#E6E9E5; --focus:#2F6F73;
+  --font-ui:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Segoe UI",sans-serif;
+  --font-num:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
+  /* 模拟桌面，和页面主题无关 */
+  --wp-light-a:#D3DEE8; --wp-light-b:#EEF2F6; --bar-light:rgba(255,255,255,.8); --icon-light:rgba(30,40,52,.2); --z-light:#56606A; --sh-light:rgba(30,40,52,.18);
+  --wp-dark-a:#11161D; --wp-dark-b:#283140; --bar-dark:rgba(10,12,16,.82); --icon-dark:rgba(255,255,255,.18); --z-dark:#C9D1DA; --sh-dark:rgba(0,0,0,.5);
+  --wp-busy-1:#E07B39; --wp-busy-2:#2F6F73; --wp-busy-3:#7A4A2A; --wp-busy-4:#C58B4E; --wp-busy-5:#3B2A20; --bar-busy:rgba(24,18,14,.72); --icon-busy:rgba(255,255,255,.2); --z-busy:#FFF3E2; --sh-busy:rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121514;--surface:#1B1F1E;--fg:#E6EAE7;--muted:#9AA39F;--line:#2C3230;--accent:#E29B5C;--accent-fg:#1B120B;--chip:#262B29;--focus:#7FC3C6;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121514;--surface:#1B1F1E;--fg:#E6EAE7;--muted:#9AA39F;--line:#2C3230;--accent:#E29B5C;--accent-fg:#1B120B;--chip:#262B29;--focus:#7FC3C6;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+header h1{font-size:26px;line-height:1.3;margin:0;letter-spacing:.02em;text-wrap:balance}
+header p{margin:6px 0 0;color:var(--muted);max-width:64ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center}
+.ctl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lab{font-size:13px;color:var(--muted);letter-spacing:.06em}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--fg);font:inherit;font-size:13.5px;padding:4px 11px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:600}
+.feed{border:0;background:var(--accent);color:var(--accent-fg);font:inherit;font-size:14px;font-weight:600;padding:6px 16px;border-radius:9px;cursor:pointer}
+.feed:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input[type=range]{accent-color:var(--accent);width:130px}
+.val{font-variant-numeric:tabular-nums;font-family:var(--font-num);font-size:13.5px;min-width:4.6em}
+.ends{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:840px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.card-h{display:flex;align-items:baseline;gap:10px;padding:13px 16px 11px;flex-wrap:wrap}
+.no{font-family:var(--font-num);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.card-h h2{font-size:17px;margin:0}
+.tags{font-size:12.5px;color:var(--muted)}
+.pick{margin-left:auto;font-size:12px;font-weight:600;color:var(--accent);border:1px solid currentColor;border-radius:999px;padding:0 9px;line-height:20px}
+.stage{position:relative;min-height:262px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;--barh:30px;overflow:hidden}
+.stage svg{display:block;width:100%;height:auto;overflow:visible;position:relative;z-index:1}
+.stage.small svg{width:210px}
+.stage.small{--barh:40px}
+.bar{width:100%;height:var(--barh);background:var(--bar);display:flex;align-items:center;justify-content:center;gap:8px;flex:none}
+.bar i{width:15px;height:15px;border-radius:4px;background:var(--icon)}
+.bg-light{background:linear-gradient(165deg,var(--wp-light-a),var(--wp-light-b));--bar:var(--bar-light);--icon:var(--icon-light);--zcol:var(--z-light);--shadow:var(--sh-light)}
+.bg-dark{background:linear-gradient(165deg,var(--wp-dark-a),var(--wp-dark-b));--bar:var(--bar-dark);--icon:var(--icon-dark);--zcol:var(--z-dark);--shadow:var(--sh-dark)}
+.bg-busy{background:radial-gradient(circle at 18% 30%,var(--wp-busy-1) 0 17%,transparent 18%),radial-gradient(circle at 78% 22%,var(--wp-busy-2) 0 21%,transparent 22%),repeating-linear-gradient(115deg,var(--wp-busy-3) 0 14px,var(--wp-busy-4) 14px 28px,var(--wp-busy-5) 28px 40px);--bar:var(--bar-busy);--icon:var(--icon-busy);--zcol:var(--z-busy);--shadow:var(--sh-busy)}
+.notes{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;padding:12px 16px 16px;margin:0;font-size:13.5px;border-top:1px solid var(--line)}
+.notes dt{color:var(--muted);white-space:nowrap}
+.notes dd{margin:0}
+.lvl{font-weight:600}
+.foot{color:var(--muted);font-size:13.5px;max-width:72ch;margin:0}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>比格画风打样</h1>
+    <p>四版用的是同一套代码骨骼，只换了画法。拖月龄看它长大，点“喂一碗”看碗里的粮一点点变少、肚子鼓起来；再把桌面换成深色或花哨壁纸，看它还清不清楚。</p>
+  </header>
+
+  <section class="panel" aria-label="控制">
+    <div class="ctl">
+      <span class="lab">月龄</span>
+      <input type="range" id="age" min="2" max="12" step="1" value="7" aria-label="月龄">
+      <span class="val" id="ageVal">7 个月</span>
+    </div>
+    <div class="ctl">
+      <span class="lab">状态</span>
+      <div class="seg" id="mood" role="group" aria-label="状态">
+        <button type="button" data-v="happy" aria-pressed="true">开心</button>
+        <button type="button" data-v="hungry" aria-pressed="false">饿了</button>
+        <button type="button" data-v="sleepy" aria-pressed="false">困了</button>
+      </div>
+      <button type="button" class="feed" id="feed">喂一碗</button>
+    </div>
+    <div class="ctl">
+      <span class="lab">肚子</span>
+      <span class="ends">空</span>
+      <input type="range" id="belly" min="0" max="100" step="1" value="30" aria-label="肚子（演示用）">
+      <span class="ends">撑</span>
+    </div>
+    <div class="ctl">
+      <span class="lab">桌面</span>
+      <div class="seg" id="bg" role="group" aria-label="桌面背景">
+        <button type="button" data-v="light" aria-pressed="true">浅色</button>
+        <button type="button" data-v="dark" aria-pressed="false">深色</button>
+        <button type="button" data-v="busy" aria-pressed="false">花哨壁纸</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="lab">尺寸</span>
+      <div class="seg" id="size" role="group" aria-label="尺寸">
+        <button type="button" data-v="big" aria-pressed="true">放大看</button>
+        <button type="button" data-v="small" aria-pressed="false">桌面尺寸</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <article class="card">
+      <div class="card-h"><span class="no">01</span><h2>圆滚滚 Q 版</h2><span class="tags">无描边 · 大头短腿 · 纯色块</span></div>
+      <div class="stage bg-light" data-key="chibi"><svg viewBox="0 0 320 180" role="img" aria-label="Q 版比格"><g class="dyn"></g></svg><div class="bar"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <dl class="notes">
+        <dt>好在</dt><dd>最可爱，画法最简单，常驻桌面最省资源。</dd>
+        <dt>代价</dt><dd>没有轮廓线，深色和花哨壁纸上容易糊；比例夸张，品种差别主要靠毛色。</dd>
+        <dt>我的把握</dt><dd class="lvl">高</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-h"><span class="no">02</span><h2>贴纸描边</h2><span class="tags">深色描边 + 白边 · 中等比例</span><span class="pick">我倾向这版</span></div>
+      <div class="stage bg-light" data-key="sticker"><svg viewBox="0 0 320 180" role="img" aria-label="贴纸描边比格"><defs>
+        <filter id="sticker-halo" filterUnits="userSpaceOnUse" x="-30" y="-60" width="380" height="270" color-interpolation-filters="sRGB">
+          <feMorphology in="SourceAlpha" operator="dilate" radius="3.6" result="d"/>
+          <feFlood flood-color="#FFFFFF"/><feComposite in2="d" operator="in" result="w"/>
+          <feGaussianBlur in="d" stdDeviation="2.2" result="b"/><feOffset in="b" dy="2.2" result="o"/>
+          <feFlood flood-color="#000000" flood-opacity=".22"/><feComposite in2="o" operator="in" result="sh"/>
+          <feMerge><feMergeNode in="sh"/><feMergeNode in="w"/></feMerge>
+        </filter>
+        <filter id="sticker-ol" filterUnits="userSpaceOnUse" x="-30" y="-60" width="380" height="270" color-interpolation-filters="sRGB">
+          <feMorphology in="SourceAlpha" operator="dilate" radius="1.1" result="d"/>
+          <feFlood flood-color="#3A281C"/><feComposite in2="d" operator="in" result="o"/>
+          <feMerge><feMergeNode in="o"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs><g class="dyn"></g></svg><div class="bar"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <dl class="notes">
+        <dt>好在</dt><dd>什么壁纸上都清楚，表情、耳朵、尾巴最好认，适合只靠身体语言表达状态。</dd>
+        <dt>代价</dt><dd>描边要跟着形状实时算，比 01 稍费资源；整体偏表情包的感觉。</dd>
+        <dt>我的把握</dt><dd class="lvl">高</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-h"><span class="no">03</span><h2>柔光写实比例</h2><span class="tags">渐变阴影 · 长腿长耳 · 接近真比格</span></div>
+      <div class="stage bg-light" data-key="real"><svg viewBox="0 0 320 180" role="img" aria-label="写实比例比格"><defs>
+        <radialGradient id="real-tan" cx=".42" cy=".28" r=".85"><stop offset="0" stop-color="#E6B57C"/><stop offset=".55" stop-color="#C98747"/><stop offset="1" stop-color="#A2652F"/></radialGradient>
+        <radialGradient id="real-head" cx=".42" cy=".32" r=".8"><stop offset="0" stop-color="#E8B87F"/><stop offset=".6" stop-color="#CB8A4A"/><stop offset="1" stop-color="#A86B34"/></radialGradient>
+        <linearGradient id="real-saddle" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4A3E36"/><stop offset=".6" stop-color="#2A231F"/><stop offset="1" stop-color="#1E1916"/></linearGradient>
+        <linearGradient id="real-white" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#F7F2EB"/><stop offset="1" stop-color="#DCD1C3"/></linearGradient>
+        <linearGradient id="real-ear" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="#C08243"/><stop offset=".7" stop-color="#9A5F2C"/><stop offset="1" stop-color="#7E4A22"/></linearGradient>
+        <radialGradient id="real-iris" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="#7A4E2A"/><stop offset=".6" stop-color="#4A2E18"/><stop offset="1" stop-color="#24150B"/></radialGradient>
+        <linearGradient id="real-steel" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8E979F"/><stop offset=".38" stop-color="#E4E8EC"/><stop offset=".7" stop-color="#B3BBC3"/><stop offset="1" stop-color="#7F8890"/></linearGradient>
+        <linearGradient id="real-steelrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F1F4F6"/><stop offset="1" stop-color="#AEB6BE"/></linearGradient>
+        <filter id="real-blur" filterUnits="userSpaceOnUse" x="-30" y="-60" width="380" height="270"><feGaussianBlur stdDeviation="2.6"/></filter>
+        <filter id="real-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.5"/></filter>
+      </defs><g class="dyn"></g></svg><div class="bar"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <dl class="notes">
+        <dt>好在</dt><dd>最像真的比格：腿长、有脖子、后腿有关节角度，毛色有明暗。</dd>
+        <dt>代价</dt><dd>缩到桌面大小后表情不太看得清；细节多，动作要做自然得花更多工夫打磨。</dd>
+        <dt>我的把握</dt><dd class="lvl">中</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-h"><span class="no">04</span><h2>绘本手绘</h2><span class="tags">水彩纸纹 · 抖动线条</span></div>
+      <div class="stage bg-light" data-key="book"><svg viewBox="0 0 320 180" role="img" aria-label="绘本风比格"><defs>
+        <filter id="book-wc" filterUnits="userSpaceOnUse" x="-30" y="-60" width="380" height="270" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="7" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G" result="d"/>
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="g"/>
+          <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.42  0 0 0 0 0.3  0 0 0 0 0.18  0 0 0 -0.55 0.33" result="ga"/>
+          <feComposite in="ga" in2="d" operator="in" result="gi"/>
+          <feMerge><feMergeNode in="d"/><feMergeNode in="gi"/></feMerge>
+        </filter>
+      </defs><g class="dyn"></g></svg><div class="bar"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <dl class="notes">
+        <dt>好在</dt><dd>最有个性，暖，有手作感。</dd>
+        <dt>代价</dt><dd>滤镜每一帧都要重算，常驻桌面最吃资源，正式做可能得预先渲染；线条处理不好会显脏。</dd>
+        <dt>我的把握</dt><dd class="lvl">中</dd>
+      </dl>
+    </article>
+  </section>
+
+  <p class="foot">打样里的消化加快了，一碗粮大约一分钟消下去；正式版按真实时间走。挑中一版后，我按它补走路、趴下、睡觉、被拎起这些动作，再出其他品种。</p>
+</div>
+
+<script>
+(() => {
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const n = v => Math.round(v * 100) / 100;
+let reduce = false; try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+const AMP = reduce ? .35 : 1;
+const GY = 180, BW = 54, BH = 15;
+
+const STY = {
+  chibi: { headR:38, torsoRx:47, torsoRy:26, leg:19, legW:17, earL:44, earW:25, tailL:28, tailW:9, muzzle:1, headX:.62, headUp:.35, hock:0, thigh:false, neck:false, faceTurn:.08, crx:1.06, lw:0,
+    col:{ tan:'#DA9658', ear:'#BF793E', saddle:'#3A302A', white:'#FFF9F1', shade:'#E8DBCA', nose:'#2E251F', eye:'#2A1E17', mouth:'#8A3A33', tongue:'#F28E8B', blush:'#F4A39B', brow:'#8E5A2E', kib:'#9A5E2A' },
+    bowl:{ body:'#8CC2E5', rim:'#B8DBF1', inner:'#4D82A6', line:'' } },
+  sticker: { headR:32, torsoRx:56, torsoRy:26, leg:30, legW:15, earL:40, earW:21, tailL:34, tailW:8, muzzle:1, headX:.8, headUp:.6, hock:.3, thigh:true, neck:true, faceTurn:.1, crx:1.02, lw:2.1,
+    col:{ tan:'#DB8A40', ear:'#BC6E2C', saddle:'#2B231E', white:'#FFFFFF', shade:'#E4DCD0', nose:'#211A15', eye:'#1D1611', mouth:'#7D2B29', tongue:'#F27C7C', blush:'', brow:'#7A4A22', line:'#3A281C', kib:'#9A5E2A' },
+    bowl:{ body:'#E0574A', rim:'#F27E72', inner:'#A3332A', line:'#3A281C' } },
+  real: { headR:26, torsoRx:64, torsoRy:26, leg:46, legW:12.5, earL:38, earW:17, tailL:42, tailW:7, muzzle:1.12, headX:1, headUp:1.15, hock:.6, thigh:true, neck:true, faceTurn:.12, crx:.96, lw:0,
+    col:{ tan:'#C98747', neck:'#C68446', ear:'#A86A33', saddle:'#26201C', white:'#F7F2EA', shade:'#D6CCBF', nose:'#1E1814', eye:'#2A190E', mouth:'#6E2A26', tongue:'#E2817D', blush:'', brow:'#8E582A', kib:'#8C5426' },
+    bowl:{ body:'url(#real-steel)', rim:'url(#real-steelrim)', inner:'#6F777F', line:'' } },
+  book: { headR:34, torsoRx:54, torsoRy:27, leg:25, legW:16, earL:42, earW:22, tailL:32, tailW:8.5, muzzle:1, headX:.7, headUp:.45, hock:.15, thigh:false, neck:false, faceTurn:.08, crx:1.04, lw:1.25,
+    col:{ tan:'#D9A066', ear:'#BF834A', saddle:'#4C413B', white:'#FFF8EC', shade:'#EAD9C2', nose:'#3A2F29', eye:'#33281F', mouth:'#8C4A3E', tongue:'#EE9A8E', blush:'#F0A898', brow:'#9A6A40', line:'#6E4D35', kib:'#A06A36' },
+    bowl:{ body:'#7DB2A8', rim:'#A6CEC5', inner:'#4D8077', line:'#56695E' } }
+};
+
+// 碗里的粮：先铺底层，再堆成小山；按从下往上排序，吃的时候从顶上先少
+function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const KIB = (() => {
+  const r = mulberry(11), arr = [];
+  for (let i = 0; i < 14; i++) { const u = r() * 2 - 1; arr.push({ x: u * (BW / 2 - 8), y: -BH + (r() * 2.6 - .4), rot: r() * 180 }); }
+  for (let i = 0; i < 26; i++) { const u = r() * 2 - 1; const m = 8 * (1 - u * u) + 1; arr.push({ x: u * (BW / 2 - 8), y: -BH - .6 - r() * m, rot: r() * 180 }); }
+  arr.sort((p, q) => q.y - p.y);
+  return arr;
+})();
+
+const S = { months: 7, mood: 'happy', belly: .3, food: .6, eat: 0, eating: false, t: 0, lickUntil: 0 };
+
+function geom(P, a, belly){
+  const kid = 1 - a, G = {};
+  G.s = .6 + .4 * a;
+  const hs = 1 + .3 * kid, ls = .7 + .3 * a, bs = .84 + .16 * a;
+  G.rx = P.torsoRx * bs; G.ry = P.torsoRy;
+  G.vl = P.leg * ls; G.legW = P.legW * (.92 + .08 * a);
+  G.cy = -(G.vl + G.ry);
+  G.ryB = G.ry * (.9 + .62 * belly);
+  G.R = P.headR * hs; G.ms = (.75 + .25 * a) * P.muzzle;
+  G.hx = G.rx * P.headX; G.hy = G.cy - G.ry * P.headUp - G.R * .55;
+  G.earL = P.earL * hs * (1 + .05 * kid); G.earW = P.earW * hs;
+  G.tailL = P.tailL * (.78 + .22 * a); G.tailW = P.tailW * (.85 + .15 * a);
+  return G;
+}
+
+const sk = (C, lw, m) => lw ? ` stroke="${C.line}" stroke-width="${n(lw * (m || 1))}" stroke-linejoin="round" stroke-linecap="round"` : '';
+function fills(key, C){
+  if (key === 'real') return { tan:'url(#real-tan)', head:'url(#real-head)', saddle:'url(#real-saddle)', white:'url(#real-white)', ear:'url(#real-ear)' };
+  return { tan:C.tan, head:C.tan, saddle:C.saddle, white:C.white, ear:C.ear };
+}
+
+function torsoPath(rx, ry, ryB, cy){
+  const k = .6, kb = .56, ry2 = ry * .92;
+  return `M${n(-rx)},${n(cy)} C${n(-rx)},${n(cy - k * ry2)} ${n(-k * rx)},${n(cy - ry)} 0,${n(cy - ry)} C${n(k * rx)},${n(cy - ry)} ${n(rx)},${n(cy - k * ry)} ${n(rx)},${n(cy)} C${n(rx)},${n(cy + kb * ryB)} ${n(kb * rx)},${n(cy + ryB)} 0,${n(cy + ryB)} C${n(-kb * rx)},${n(cy + ryB)} ${n(-rx)},${n(cy + kb * ryB)} ${n(-rx)},${n(cy)} Z`;
+}
+
+function legPath(x, top, w, hock, hind){
+  const foot = -w * .5;
+  if (hind && hock > 0){
+    const kx = x - w * hock, ky = top + (foot - top) * .58, fx = x - w * .25 * hock;
+    return { d: `M${n(x)},${n(top)} L${n(kx)},${n(ky)} L${n(fx)},${n(foot)}`, fx };
+  }
+  return { d: `M${n(x)},${n(top)} L${n(x + w * .05)},${n(foot)}`, fx: x + w * .05 };
+}
+function strokeShape(d, w, col, C, lw){
+  let s = '';
+  if (lw) s += `<path d="${d}" fill="none" stroke="${C.line}" stroke-width="${n(w + lw * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  return s + `<path d="${d}" fill="none" stroke="${col}" stroke-width="${n(w)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+
+function tailSVG(G, pose, C, lw, cy, ry){
+  const ang = pose.tail * D2R, L = G.tailL, W = G.tailW;
+  const bx = -G.rx * .86, by = cy - ry * .5;
+  const dx = Math.sin(ang), dy = -Math.cos(ang), px = Math.cos(ang), py = Math.sin(ang);
+  const p0 = [bx, by], p1 = [bx + dx * L * .55 - px * L * .2, by + dy * L * .55 - py * L * .2], p2 = [bx + dx * L + px * L * .1, by + dy * L + py * L * .1];
+  const t = .64, u = 1 - t;
+  const m = [u*u*p0[0] + 2*u*t*p1[0] + t*t*p2[0], u*u*p0[1] + 2*u*t*p1[1] + t*t*p2[1]];
+  const c2 = [u * p1[0] + t * p2[0], u * p1[1] + t * p2[1]];
+  const full = `M${n(p0[0])},${n(p0[1])} Q${n(p1[0])},${n(p1[1])} ${n(p2[0])},${n(p2[1])}`;
+  const tip = `M${n(m[0])},${n(m[1])} Q${n(c2[0])},${n(c2[1])} ${n(p2[0])},${n(p2[1])}`;
+  let s = '';
+  if (lw) s += `<path d="${full}" fill="none" stroke="${C.line}" stroke-width="${n(W + lw * 2)}" stroke-linecap="round"/>`;
+  s += `<path d="${full}" fill="none" stroke="${C.saddle}" stroke-width="${n(W)}" stroke-linecap="round"/>`;
+  s += `<path d="${tip}" fill="none" stroke="${C.white}" stroke-width="${n(W)}" stroke-linecap="round"/>`;
+  return s;
+}
+
+function bodySVG(key, P, C, F, G, pose, lw, tp, cy, ry, ryB, head){
+  const rx = G.rx, w = G.legW;
+  let s = '';
+  const legs = [
+    { x:-rx * .46, hind:true, far:true }, { x:rx * .64, hind:false, far:true },
+    { x:-rx * .62, hind:true, far:false }, { x:rx * .48, hind:false, far:false }
+  ];
+  for (const L of legs){
+    const col = L.far ? C.shade : C.white;
+    const lp = legPath(L.x, cy, w, P.hock, L.hind);
+    s += strokeShape(lp.d, w, col, C, lw);
+    s += `<ellipse cx="${n(lp.fx + w * .22)}" cy="${n(-w * .3)}" rx="${n(w * .62)}" ry="${n(w * .36)}" fill="${col}"${sk(C, lw)}/>`;
+  }
+  s += tailSVG(G, pose, C, lw, cy, ry);
+  if (P.neck){
+    const R = G.R, ax = rx * .6, ay = cy - ry * .35, tx = head.x - .12 * R, ty = head.y + .3 * R, nw = R * .92;
+    const d = `M${n(ax)},${n(ay)} L${n(tx)},${n(ty)}`;
+    s += strokeShape(d, nw, C.neck || C.tan, C, lw);
+    const vx = tx - ax, vy = ty - ay, len = Math.hypot(vx, vy) || 1, nx = -vy / len, ny = vx / len, off = nw * .26;
+    s += `<path d="M${n(ax + nx * off)},${n(ay + ny * off)} L${n(tx + nx * off)},${n(ty + ny * off)}" stroke="${C.white}" stroke-width="${n(nw * .42)}" stroke-linecap="round"/>`;
+  }
+  s += `<path d="${tp}" fill="${F.tan}"/>`;
+  let inner = `<ellipse cx="${n(rx * .1)}" cy="${n(cy + ryB * .95)}" rx="${n(rx * .98)}" ry="${n(ryB * .62)}" fill="${F.white}"/>`;
+  inner += `<ellipse cx="${n(rx * .95)}" cy="${n(cy + ry * .2)}" rx="${n(rx * .28)}" ry="${n(ry * .9)}" fill="${F.white}"/>`;
+  if (P.thigh) inner += `<ellipse cx="${n(-rx * .6)}" cy="${n(cy + ry * .22)}" rx="${n(rx * .27)}" ry="${n(ry * .8)}" transform="rotate(-10 ${n(-rx * .6)} ${n(cy + ry * .22)})" fill="${F.tan}"${sk(C, lw, .8)}/>`;
+  const sx = -rx * .12, sy = cy - ry * .72, srx = rx * .8, sry = ry * .74;
+  inner += `<ellipse cx="${n(sx)}" cy="${n(sy)}" rx="${n(srx)}" ry="${n(sry)}" fill="${F.saddle}"${key === 'real' ? ' filter="url(#real-soft)"' : ''}/>`;
+  s += `<g clip-path="url(#${key}-tc)">${inner}</g>`;
+  if (lw) s += `<path d="${tp}" fill="none"${sk(C, lw)}/>`;
+  return s;
+}
+
+function earPath(w, L){
+  return `M${n(-w * .42)},${n(-w * .15)} C${n(-w * .78)},${n(L * .25)} ${n(-w * .66)},${n(L * .86)} ${n(-w * .08)},${n(L)} C${n(w * .32)},${n(L * 1.06)} ${n(w * .6)},${n(L * .78)} ${n(w * .52)},${n(L * .42)} C${n(w * .46)},${n(L * .12)} ${n(w * .36)},${n(-w * .1)} ${n(w * .12)},${n(-w * .26)} C${n(-w * .05)},${n(-w * .32)} ${n(-w * .28)},${n(-w * .28)} ${n(-w * .42)},${n(-w * .15)} Z`;
+}
+
+function eyeSVG(key, cx, cy, R, pose, C){
+  const hungry = pose.hungry;
+  let rx, ry;
+  if (key === 'chibi'){ rx = ry = R * (hungry ? .18 : .155); }
+  else if (key === 'sticker'){ rx = R * .115 * (hungry ? 1.15 : 1); ry = R * .145 * (hungry ? 1.12 : 1); }
+  else if (key === 'real'){ rx = R * .13; ry = R * .12; }
+  else { rx = R * .085 * (hungry ? 1.15 : 1); ry = R * .105 * (hungry ? 1.12 : 1); }
+  const lineW = R * .055;
+  if (pose.squint && key !== 'real')
+    return `<path d="M${n(cx - rx)},${n(cy + ry * .35)} Q${n(cx)},${n(cy - ry * 1.1)} ${n(cx + rx)},${n(cy + ry * .35)}" fill="none" stroke="${C.eye}" stroke-width="${n(lineW)}" stroke-linecap="round"/>`;
+  const lid = pose.lid;
+  if (lid >= .9)
+    return `<path d="M${n(cx - rx)},${n(cy)} Q${n(cx)},${n(cy + ry * .8)} ${n(cx + rx)},${n(cy)}" fill="none" stroke="${C.eye}" stroke-width="${n(lineW)}" stroke-linecap="round"/>`;
+  const y0 = cy - ry + 2 * ry * lid;
+  const seg = (rx, ry, cx, cy) => {
+    if (y0 <= cy - ry + .01) return `<ellipse cx="${n(cx)}" cy="${n(cy)}" rx="${n(rx)}" ry="${n(ry)}"`;
+    const t = (y0 - cy) / ry; if (t >= 1) return null;
+    const xc = rx * Math.sqrt(1 - t * t);
+    return `<path d="M${n(cx - xc)},${n(y0)} A${n(rx)},${n(ry)} 0 ${y0 < cy ? 1 : 0} 0 ${n(cx + xc)},${n(y0)} Z"`;
+  };
+  let s = '';
+  if (key === 'real'){
+    const a = seg(rx, ry, cx, cy); if (a) s += a + ` fill="url(#real-iris)"/>`;
+    const pr = R * .065, b = seg(pr, pr, cx + rx * .05, cy + ry * .05); if (b) s += b + ` fill="#120B07"/>`;
+    s += `<path d="M${n(cx - rx * 1.15)},${n(cy - ry * .1)} Q${n(cx)},${n(cy - ry * 1.45)} ${n(cx + rx * 1.15)},${n(cy - ry * .1)}" fill="none" stroke="#3A2416" stroke-width="${n(R * .035)}" stroke-linecap="round" opacity=".8"/>`;
+  } else {
+    const a = seg(rx, ry, cx, cy); if (a) s += a + ` fill="${C.eye}"/>`;
+  }
+  if (lid > .05){
+    const t = (y0 - cy) / ry, xc = rx * Math.sqrt(Math.max(0, 1 - t * t));
+    s += `<path d="M${n(cx - xc - R * .01)},${n(y0)} Q${n(cx)},${n(y0 - ry * .12)} ${n(cx + xc + R * .01)},${n(y0)}" fill="none" stroke="${C.eye}" stroke-width="${n(R * .04)}" stroke-linecap="round"/>`;
+  }
+  if (lid < .4){
+    const hr = rx * (key === 'chibi' ? .36 : .34) * (hungry ? 1.25 : 1), hy = cy - ry * .38;
+    if (hy > y0 + hr * .5){
+      s += `<circle cx="${n(cx - rx * .28)}" cy="${n(hy)}" r="${n(hr)}" fill="#fff"/>`;
+      if (key === 'chibi' || hungry) s += `<circle cx="${n(cx + rx * .32)}" cy="${n(cy + ry * .32)}" r="${n(hr * .45)}" fill="#fff" opacity=".9"/>`;
+    }
+  }
+  return s;
+}
+
+function headSVG(key, P, C, F, G, pose, lw, earA){
+  const R = G.R, ms = G.ms, fx = R * P.faceTurn, S = sk(C, lw);
+  let s = `<ellipse cx="0" cy="0" rx="${n(R * P.crx)}" ry="${n(R * .9)}" fill="${F.head}"${S}/>`;
+  s += `<path d="M${n(fx - .07 * R)},${n(-.84 * R)} Q${n(fx - .09 * R)},${n(-.18 * R)} ${n(fx - .3 * R)},${n(.3 * R)} L${n(fx + .3 * R)},${n(.3 * R)} Q${n(fx + .09 * R)},${n(-.18 * R)} ${n(fx + .07 * R)},${n(-.84 * R)} Z" fill="${F.white}"/>`;
+  s += `<ellipse cx="${n(fx)}" cy="${n(.44 * R)}" rx="${n(.47 * R * ms)}" ry="${n(.38 * R * ms)}" fill="${F.white}"${sk(C, lw, .7)}/>`;
+  if (C.blush){
+    s += `<ellipse cx="${n(fx - .4 * R)}" cy="${n(.25 * R)}" rx="${n(.13 * R)}" ry="${n(.075 * R)}" fill="${C.blush}" opacity=".55"/>`;
+    s += `<ellipse cx="${n(fx + .4 * R)}" cy="${n(.25 * R)}" rx="${n(.13 * R)}" ry="${n(.075 * R)}" fill="${C.blush}" opacity=".55"/>`;
+  }
+  const ew = G.earW, el = G.earL, ep = earPath(ew, el), ax = .74 * R, ay = -.46 * R;
+  const fold = lw ? `<path d="M${n(-ew * .12)},${n(ew * .05)} Q${n(-ew * .34)},${n(el * .42)} ${n(-ew * .1)},${n(el * .74)}" fill="none" stroke="${C.line}" stroke-width="${n(lw * .6)}" stroke-linecap="round" opacity=".45"/>` : '';
+  s += `<g transform="translate(${n(-ax + fx * .4)},${n(ay)}) rotate(${n(earA[0])})"><path d="${ep}" fill="${F.ear}"${S}/>${fold}</g>`;
+  s += `<g transform="translate(${n(ax * .96 + fx * .4)},${n(ay)}) rotate(${n(-earA[1])}) scale(-.94,1)"><path d="${ep}" fill="${F.ear}"${S}/>${fold}</g>`;
+  const ey = -.04 * R, ex1 = fx - .35 * R, ex2 = fx + .35 * R, gx = pose.gaze[0] * R * .025, gy = pose.gaze[1] * R * .025;
+  s += eyeSVG(key, ex1 + gx, ey + gy, R, pose, C) + eyeSVG(key, ex2 + gx, ey + gy, R, pose, C);
+  if (key !== 'chibi' || pose.hungry){
+    const raise = pose.hungry ? .09 * R : 0, by = ey - .3 * R, bw = R * .045, op = key === 'real' ? .7 : 1;
+    s += `<path d="M${n(ex1 - .12 * R)},${n(by + .02 * R)} Q${n(ex1)},${n(by - .04 * R)} ${n(ex1 + .11 * R)},${n(by - raise)}" fill="none" stroke="${C.brow}" stroke-width="${n(bw)}" stroke-linecap="round" opacity="${op}"/>`;
+    s += `<path d="M${n(ex2 + .12 * R)},${n(by + .02 * R)} Q${n(ex2)},${n(by - .04 * R)} ${n(ex2 - .11 * R)},${n(by - raise)}" fill="none" stroke="${C.brow}" stroke-width="${n(bw)}" stroke-linecap="round" opacity="${op}"/>`;
+  }
+  const nw = R * (key === 'chibi' ? .19 : .17), nh = R * (key === 'chibi' ? .13 : .12), nx = fx, ny = .2 * R, nb = ny + nh * 1.05;
+  s += `<path d="M${n(nx - nw)},${n(ny)} C${n(nx - nw)},${n(ny - nh * 1.15)} ${n(nx + nw)},${n(ny - nh * 1.15)} ${n(nx + nw)},${n(ny)} C${n(nx + nw)},${n(ny + nh * .8)} ${n(nx + nw * .25)},${n(nb)} ${n(nx)},${n(nb)} C${n(nx - nw * .25)},${n(nb)} ${n(nx - nw)},${n(ny + nh * .8)} ${n(nx - nw)},${n(ny)} Z" fill="${C.nose}"/>`;
+  s += `<ellipse cx="${n(nx - nw * .35)}" cy="${n(ny - nh * .45)}" rx="${n(nw * .32)}" ry="${n(nh * .22)}" fill="#fff" opacity=".55"/>`;
+  const my = .5 * R, ml = R * .045, mc = C.eye, line = (d) => `<path d="${d}" fill="none" stroke="${mc}" stroke-width="${n(ml)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (pose.mouth === 'yawn'){
+    const o = pose.mouthO;
+    s += line(`M${n(nx)},${n(nb)} L${n(nx)},${n(my - .02 * R)}`);
+    s += `<ellipse cx="${n(nx)}" cy="${n(my + .13 * R * o)}" rx="${n(R * (.07 + .06 * o))}" ry="${n(R * (.03 + .17 * o))}" fill="${C.mouth}"${sk(C, lw, .6)}/>`;
+    s += `<ellipse cx="${n(nx)}" cy="${n(my + .24 * R * o)}" rx="${n(R * .06 * o)}" ry="${n(R * .05 * o)}" fill="${C.tongue}"/>`;
+  } else {
+    if (pose.mouth === 'open'){
+      const o = pose.mouthO;
+      s += `<path d="M${n(nx - .13 * R)},${n(my)} Q${n(nx)},${n(my + .38 * R * o)} ${n(nx + .13 * R)},${n(my)} Z" fill="${C.mouth}"/>`;
+      s += `<ellipse cx="${n(nx)}" cy="${n(my + .15 * R * o)}" rx="${n(.075 * R)}" ry="${n(.075 * R * o)}" fill="${C.tongue}"/>`;
+    }
+    s += line(`M${n(nx)},${n(nb)} L${n(nx)},${n(my)}`);
+    s += line(`M${n(nx - .2 * R)},${n(my - .05 * R)} Q${n(nx - .1 * R)},${n(my + .07 * R)} ${n(nx)},${n(my)} Q${n(nx + .1 * R)},${n(my + .07 * R)} ${n(nx + .2 * R)},${n(my - .05 * R)}`);
+    if (pose.lick >= 0){
+      const k = Math.sin(pose.lick * Math.PI), tx = nx - .12 * R * k, ty = my + .02 * R - .12 * R * k;
+      s += `<ellipse cx="${n(tx)}" cy="${n(ty)}" rx="${n(.065 * R)}" ry="${n(.1 * R)}" transform="rotate(${n(-40 * k)} ${n(tx)} ${n(ty)})" fill="${C.tongue}"${sk(C, lw, .5)}/>`;
+    }
+  }
+  return s;
+}
+
+function bowlBack(B, C, bx, food){
+  const top = GY - BH, rx = BW / 2, la = B.line ? ` stroke="${B.line}" stroke-width="1.6" stroke-linejoin="round"` : '';
+  let s = `<ellipse cx="${n(bx)}" cy="${top}" rx="${rx}" ry="5.4" fill="${B.rim}"${la}/>`;
+  s += `<ellipse cx="${n(bx)}" cy="${top + .5}" rx="${rx - 3.4}" ry="3.7" fill="${B.inner}"/>`;
+  const cnt = Math.round(food * KIB.length);
+  for (let i = 0; i < cnt; i++){
+    const k = KIB[i], x = bx + k.x, y = GY + k.y;
+    s += `<ellipse cx="${n(x)}" cy="${n(y)}" rx="2.7" ry="2.15" transform="rotate(${n(k.rot)} ${n(x)} ${n(y)})" fill="${C.kib}"${B.line ? ` stroke="${B.line}" stroke-width=".7"` : ''}/>`;
+  }
+  return s;
+}
+function bowlFront(B, bx){
+  const top = GY - BH, rx = BW / 2, la = B.line ? ` stroke="${B.line}" stroke-width="1.6" stroke-linejoin="round"` : '';
+  let s = `<path d="M${n(bx - rx)},${top} A${rx},5.4 0 0 0 ${n(bx + rx)},${top} L${n(bx + rx - 6)},${GY} L${n(bx - rx + 6)},${GY} Z" fill="${B.body}"${la}/>`;
+  s += `<path d="M${n(bx - rx + 1.2)},${top + .6} A${rx - 1.2},4.8 0 0 0 ${n(bx + rx - 1.2)},${top + .6}" fill="none" stroke="${B.rim}" stroke-width="2.2" opacity=".9"/>`;
+  s += `<path d="M${n(bx - rx + 8)},${top + 8} L${n(bx - rx + 9.5)},${GY - 3}" stroke="#fff" stroke-opacity=".35" stroke-width="2.4" stroke-linecap="round"/>`;
+  return s;
+}
+
+function computePose(){
+  const t = S.t, m = S.mood;
+  const p = { mood:m, bob:0, mouth:'smile', mouthO:0, lick:-1, squint:false, headRot:0, drop:0, gaze:[0, 0], zs:false, hungry:false };
+  p.br = Math.sin(t * TAU * (m === 'sleepy' ? .28 : .45));
+  const bp = t % 3.9; let lid = bp < .16 ? 1 - Math.abs(bp - .08) / .08 : 0;
+  if (S.eating){
+    p.tail = -28 + 18 * Math.sin(t * TAU * 2.4) * AMP;
+    lid = Math.max(lid, .35);
+  } else if (m === 'happy'){
+    p.bob = -Math.abs(Math.sin(t * TAU * 1.1)) * 2.4 * AMP;
+    p.tail = -20 + 26 * Math.sin(t * TAU * 3) * AMP;
+    p.mouth = 'open'; p.mouthO = 1;
+    p.headRot = 4 * Math.sin(t * TAU * .5) * AMP;
+    p.gaze = [Math.sin(t * .7) * .8, 0];
+    p.squint = Math.sin(t * .9) > .9;
+  } else if (m === 'hungry'){
+    p.hungry = true;
+    p.tail = -40 + 9 * Math.sin(t * TAU) * AMP;
+    const w = .5 + .5 * Math.tanh(Math.sin(t * TAU / 3.6) * 4);
+    p.gaze = [2.2 * w, 1.6 * w];
+    p.headRot = -9 * (1 - w) * AMP;
+    const lt = t % 2.8; if (lt < .6) p.lick = lt / .6;
+  } else {
+    p.tail = -118 + 3 * Math.sin(t * TAU * .3);
+    const yt = t % 8, o = yt < 1.8 ? Math.sin(Math.PI * yt / 1.8) : 0;
+    const nod = Math.pow(Math.max(0, Math.sin(t * .75)), 3);
+    lid = Math.max(.55 + .35 * nod, o > .2 ? 1 : 0);
+    if (o > .02){ p.mouth = 'yawn'; p.mouthO = o; }
+    p.headRot = -8 * o; p.drop = .12 + .06 * nod - .1 * o; p.zs = true; p.gaze = [0, 1];
+  }
+  if (!S.eating && t < S.lickUntil){ p.lick = 1 - (S.lickUntil - t) / 1.0; p.mouth = 'smile'; }
+  p.lid = lid; p.eat = S.eat;
+  p.chew = S.eating && S.eat > .9 ? Math.sin(t * TAU * 3) * .05 : 0;
+  return p;
+}
+
+function renderCard(c, pose, dt){
+  const key = c.key, P = STY[key], C = P.col, B = P.bowl;
+  const a = (S.months - 2) / 10, G = geom(P, a, S.belly);
+  const s = G.s, lw = P.lw ? P.lw / s : 0, F = fills(key, C), R = G.R, fx = R * P.faceTurn;
+  const cy = G.cy + pose.bob, ry = G.ry * (1 + .018 * pose.br * AMP);
+  const ryB = Math.min(G.ryB * (1 + .018 * pose.br * AMP), -1.5 - cy);
+  const tp = torsoPath(G.rx, ry, ryB, cy);
+  // 碗的位置：前爪前面；整组构图水平居中
+  const bxl = G.rx * .64 + G.legW * .5 + (BW / 2 - 6) / s;
+  const left = (-G.rx - G.tailL * .45) * s, right = bxl * s + BW / 2;
+  const ox = 160 - (left + right) / 2, bxC = ox + bxl * s;
+  // 头：吃饭时往碗里低头
+  const muzzleX = G.hx + fx, muzzleB = G.hy + .44 * R + .38 * R * G.ms, rimL = (-BH + 4) / s;
+  const tdx = clamp(bxl - muzzleX, -.3 * R, R), tdy = Math.max(0, rimL - muzzleB);
+  const hx = G.hx + tdx * pose.eat;
+  const hy = G.hy + pose.bob + R * pose.drop * (1 - pose.eat) + tdy * pose.eat + pose.chew * R;
+  const hrot = pose.headRot * (1 - pose.eat) + 11 * pose.eat;
+  // 耳朵：简单弹簧，跟着头的加速度甩
+  const hyc = GY + hy * s, sdt = Math.max(dt, 1 / 120);
+  if (c.py == null){ c.py = hyc; c.pv = 0; }
+  const v = (hyc - c.py) / sdt, acc = clamp((v - c.pv) / sdt, -1800, 1800);
+  c.py = hyc; c.pv = v;
+  const tgt = S.eating ? 5 : pose.mood === 'happy' ? 10 : pose.mood === 'hungry' ? 3 : -8;
+  c.ev += (-170 * (c.ea - tgt) - 11 * c.ev + acc * 2.6) * sdt;
+  c.ea = clamp(c.ea + c.ev * sdt, -16, 36);
+  const earA = [c.ea, c.ea * .9 + 1];
+
+  const body = bodySVG(key, P, C, F, G, pose, lw, tp, cy, ry, ryB, { x:hx, y:hy });
+  const head = headSVG(key, P, C, F, G, pose, lw, earA);
+  const T = `translate(${n(ox)},${GY}) scale(${Math.round(s * 1000) / 1000})`;
+  const bodyG = `<g transform="${T}">${body}</g>`;
+  const headG = `<g transform="${T}"><g transform="translate(${n(hx)},${n(hy)}) rotate(${n(hrot)})">${head}</g></g>`;
+  const bB = bowlBack(B, C, bxC, S.food), bF = bowlFront(B, bxC);
+
+  let out = `<defs><clipPath id="${key}-tc"><path d="${tp}"/></clipPath></defs>`;
+  out += `<ellipse cx="${n(ox - G.rx * .05 * s)}" cy="${GY + 1}" rx="${n(G.rx * 1.18 * s)}" ry="4.2" style="fill:var(--shadow)"${key === 'real' ? ' filter="url(#real-blur)"' : ''}/>`;
+  if (key === 'sticker') out += `<g filter="url(#sticker-halo)">${bodyG}${bB}${headG}${bF}</g>`;
+  const fl = key === 'sticker' ? ' filter="url(#sticker-ol)"' : key === 'book' ? ' filter="url(#book-wc)"' : '';
+  out += `<g${fl}>${bodyG}</g><g${fl}>${bB}</g><g${fl}>${headG}</g><g${fl}>${bF}</g>`;
+  if (pose.zs){
+    const zx = ox + (hx + R * .85) * s, zy = GY + (hy - R * .95) * s;
+    for (let i = 0; i < 3; i++){
+      const ph = (S.t * .45 + i / 3) % 1, sz = 4 + ph * 5, x = zx + ph * 16, y = zy - ph * 26;
+      out += `<path d="M${n(x)},${n(y)} h${n(sz)} l${n(-sz)},${n(sz)} h${n(sz)}" fill="none" style="stroke:var(--zcol)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="${n(Math.sin(ph * Math.PI))}"/>`;
+    }
+  }
+  return out;
+}
+
+// ---------- 交互 ----------
+const cards = [...document.querySelectorAll('.stage')].map(el => ({ el, key: el.dataset.key, dyn: el.querySelector('.dyn'), ea: 8, ev: 0, py: null, pv: 0 }));
+const ageEl = document.getElementById('age'), ageVal = document.getElementById('ageVal');
+const bellyEl = document.getElementById('belly'), feedEl = document.getElementById('feed');
+let draggingBelly = false;
+const fmtAge = m => m >= 12 ? '12 个月 · 成年' : m <= 2 ? '2 个月 · 刚到家' : `${m} 个月`;
+ageEl.addEventListener('input', () => { S.months = +ageEl.value; ageVal.textContent = fmtAge(S.months); });
+bellyEl.addEventListener('input', () => { S.belly = +bellyEl.value / 100; });
+bellyEl.addEventListener('pointerdown', () => { draggingBelly = true; });
+window.addEventListener('pointerup', () => { draggingBelly = false; });
+function bindSeg(id, fn){
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    fn(b.dataset.v);
+  });
+  return seg;
+}
+const moodSeg = bindSeg('mood', v => { S.mood = v; });
+function syncMood(){ moodSeg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === S.mood ? 'true' : 'false')); }
+bindSeg('bg', v => cards.forEach(c => { c.el.classList.remove('bg-light', 'bg-dark', 'bg-busy'); c.el.classList.add('bg-' + v); }));
+bindSeg('size', v => cards.forEach(c => c.el.classList.toggle('small', v === 'small')));
+feedEl.addEventListener('click', () => { S.food = 1; S.eating = true; feedEl.disabled = true; });
+
+function step(dt){
+  S.t += dt;
+  if (S.eating){
+    S.eat = Math.min(1, S.eat + dt * 2.2);
+    if (S.eat > .95 && S.food > 0){ const d = Math.min(S.food, dt * .2); S.food -= d; S.belly = Math.min(1, S.belly + d * .85); }
+    if (S.food <= 0){ S.food = 0; S.eating = false; S.mood = 'happy'; S.lickUntil = S.t + 1; syncMood(); feedEl.disabled = false; }
+  } else {
+    S.eat = Math.max(0, S.eat - dt * 1.8);
+    S.belly = Math.max(0, S.belly - dt / 75);
+  }
+}
+
+let last = performance.now(), acc = 0, uiT = 0;
+function frame(now){
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  step(dt); acc += dt; uiT += dt;
+  if (acc >= 1 / 30){
+    const pose = computePose();
+    for (const c of cards) c.dyn.innerHTML = renderCard(c, pose, acc);
+    acc = 0;
+  }
+  if (uiT > .12 && !draggingBelly){ bellyEl.value = Math.round(S.belly * 100); uiT = 0; }
+  requestAnimationFrame(frame);
+}
+{ const pose = computePose(); for (const c of cards) c.dyn.innerHTML = renderCard(c, pose, 1 / 30); }
+requestAnimationFrame(frame);
+})();
+</script>

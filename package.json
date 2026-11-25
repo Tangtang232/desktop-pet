@@ -1,0 +1,16 @@
+{
+  "name": "desktop-pet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "和朋友合养的桌面宠物：一只会在任务栏上活动的 2D 骨骼动画比格",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "test": "node --test \"test/**/*.test.js\"",
+    "smoke": "electron . --smoke"
+  },
+  "devDependencies": {
+    "electron": "45.5.0"
+  }
+}
