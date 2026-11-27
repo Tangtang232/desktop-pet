@@ -6,6 +6,8 @@
 
 <p align="center"><img src="docs/images/walk.gif" alt="它在桌面上溜达、掉头往回走" width="434"></p>
 
+**下载**：到 [Releases](https://github.com/Tangtang232/desktop-pet/releases/latest) 下载 `DesktopPet-Setup-<版本>.exe`，双击就装好，装好就能和朋友一起养（详见[下载和安装](#下载和安装)）。
+
 产品需求见 [docs/PRD.md](docs/PRD.md)，合养的实现见 [docs/m2-together.md](docs/m2-together.md)，开发和测试规范见 [docs/pet-sop.md](docs/pet-sop.md)，美术需求见 [docs/art/](docs/art/)。
 
 ## 它平时干什么
@@ -115,15 +117,25 @@ sequenceDiagram
 - 整只被窗口盖住时停止绘制，只在后台算消化
 - 看门狗：页面每秒报一次平安，4 秒没消息先恢复点穿，9 秒没消息重载页面，避免卡死时挡住桌面
 - 存档先写临时文件再改名，断电不会写坏；读档时校验每个字段。页面没有 Node 权限，只能用 preload 暴露的几个接口
+- 只连两个地方：Supabase（一起养，没配置就不连）和 GitHub（装好的版本每 12 小时问一次最新版本号，请求里不带任何个人信息）。不开任何监听端口
 
-## 安装
+## 下载和安装
 
-给朋友装：把 `dist/DesktopPet-Setup-<版本>.exe` 发过去，双击就装好并自动打开。
+到 [Releases 页面](https://github.com/Tangtang232/desktop-pet/releases/latest)下载，两个文件选一个：
 
-- 不用管理员权限，装在自己的用户目录下（`%LOCALAPPDATA%\Programs`），开始菜单里会有"桌面比格"。不建桌面快捷方式，开机自启默认关着，想要就在托盘菜单里勾上
-- 安装包现在没有数字签名，Windows 会弹蓝色的"Windows 已保护你的电脑"：点"更多信息"→"仍要运行"。公司电脑可能直接拦掉，要签名证书才能解决（还没买）
-- 卸载：开始菜单或"设置 → 应用"里卸载。卸载不删存档：狗、纸条、合养都存在 `%APPDATA%\desktop-pet`，重装后狗还是那只
-- 装新版本：直接运行新的安装包，装在原来的位置上，存档不动。还没有自动更新
+| 文件 | 适合谁 |
+|---|---|
+| `DesktopPet-Setup-<版本>.exe` | 大多数人。双击就装好并自动打开 |
+| `DesktopPet-<版本>-win-x64.zip` | 不想安装，或者电脑不让装程序。解压到一个固定的文件夹，双击里面的 `DesktopPet.exe` |
+
+页面最下面的 Source code 是源码，不是程序，不用下。
+
+- 两个都带着联网配置，打开就能一起养：朋友把邀请码发给你，托盘 →「一起养…」→「输入邀请码」
+- 没有数字签名，Windows 会弹蓝色的"Windows 已保护你的电脑"：点"更多信息"→"仍要运行"。公司电脑可能直接拦掉，要签名证书才能解决（还没买）。不放心的话可以对一下 Releases 里 `SHA256SUMS.txt` 的校验值
+- 安装版不用管理员权限，装在自己的用户目录下（`%LOCALAPPDATA%\Programs`），开始菜单里会有"桌面比格"。不建桌面快捷方式，开机自启默认关着，想要就在托盘菜单里勾上
+- 压缩包版别解压在下载文件夹里随手就删了；勾了开机自启以后别挪文件夹。不用了直接删文件夹
+- 卸载：开始菜单或"设置 → 应用"里卸载。卸载不删存档：狗、纸条、合养都存在 `%APPDATA%\desktop-pet`，重装后狗还是那只。安装版和压缩包版用的是同一份存档
+- 新版本：装好的版本每 12 小时看一眼 GitHub，有新版本时托盘菜单最上面多一条「有新版本 x.y.z，去下载」，点了用浏览器打开下载页（同一个版本只弹一次托盘提示）。它不会自己下载、自己安装。安装版直接运行新的安装包，装在原来的位置上；压缩包版先从托盘退出，再解压覆盖原来的文件夹。存档都不动。托盘 →「关于」里能手动检查
 
 ## 从源码运行
 
@@ -158,14 +170,26 @@ npm run dev
 
 只填公开密钥。Secret / service_role 密钥绝不能放进客户端。
 
-## 打包
+自己搭的是另一套独立的服务，进不了用下载版的朋友的组。想和他们一起养，要连同一个 Supabase 项目：向维护这个仓库的人要一份 `config/supabase.json`。
+
+## 打包和发布
 
 ```
-npm run dist        # 打 Windows 安装包，出来的是 dist/DesktopPet-Setup-<版本>.exe（约 117 MB）
-npm run dist:dir    # 只打成文件夹 dist/win-unpacked，不做安装包，自己试跑用
+npm run dist        # 先检查联网配置能用，再打安装包和压缩包：
+                    #   dist/DesktopPet-Setup-<版本>.exe、dist/DesktopPet-<版本>-win-x64.zip
+npm run dist:dir    # 只打成文件夹 dist/win-unpacked，自己试跑用
 ```
 
-打包工具是 electron-builder，配置在 `package.json` 的 `build` 里。包里只放程序自己的代码、打包好的美术（`rig-data.js`，1 MB）、图标、手写字体和联网配置 `config/supabase.json`。高清原图（`hd-library`）、本机配置（`*.local.json`）、文档、测试都不进包。第一次打包要从 GitHub 下 NSIS 等几样小工具，之后用本机缓存。
+打包工具是 electron-builder，配置在 `package.json` 的 `build` 里。包里只放程序自己的代码、打包好的美术（`rig-data.js`，1 MB）、图标、手写字体和联网配置 `config/supabase.json`。高清原图（`hd-library`）、本机配置（`*.local.json`）、文档、测试都不进包。`config/supabase.json` 不在或填得不对时 `npm run dist` 直接停下，免得打出一个连不上的安装包。第一次打包要从 GitHub 下 NSIS 等几样小工具，之后用本机缓存。
+
+发新版本：
+
+1. 改 `package.json` 的 `version`（x.y.z，新版本提醒按它比大小），在 `docs/release-notes/<版本>.md` 写这版改了什么
+2. `npm test`、`npm run smoke` 过一遍，再 `npm run dist`
+3. 提交，`git push`
+4. `npm run release`：在 GitHub 建 `v<版本>` 的 Release，传安装包、压缩包和 `SHA256SUMS.txt`，全传完才公开。GitHub 登录用 `GH_TOKEN` 环境变量，没有就用 `git push` 时的那个登录（不打印、不写盘）。中途断了再跑一次会接着传。只想检查不上传：`npm run release -- --dry-run`
+
+装好的版本最晚 12 小时后就会提醒朋友有新版本。
 
 ## 测试
 
@@ -231,10 +255,12 @@ flowchart LR
         M --> W
     end
     M <-->|匿名登录 · RLS · 实时推送| S[(Supabase)]
+    M -->|每 12 小时问一次最新版本号| G[(GitHub Releases)]
 ```
 
 ```
-src/main/       主进程：透明窗口、桌面层、点穿、看门狗、空闲检测、托盘和右键菜单、小窗口、存档、合养联网（together.js）
+src/main/       主进程：透明窗口、桌面层、点穿、看门狗、空闲检测、托盘和右键菜单、小窗口、存档、合养联网（together.js）、
+                新版本提醒（update-check.js）
 src/preload/    暴露给各个页面的少量接口
 src/renderer/   pet.js 行为和每帧姿势；rig.js 分层素材的骨骼网格渲染；logic.js、mind.js、grow.js 和画面无关的规则；
                 note / together / watch / diary 四个小窗口；fonts/ 手写字体
@@ -243,8 +269,9 @@ supabase/       合养的数据库表、权限规则和服务器函数
 config/         联网配置的样例（真配置 supabase.json 只在本机）
 assets/         beagle/puppy/rig-data.js 是打包好给页面用的美术数据（parts.js 是早期低清版，已不用）；icons/ 托盘图标
 test/           单元测试
-tools/          build_hd.py 打包美术；bench.ps1 测 CPU；e2e/ 真桌面测试；docs/ 生成 README 配图；out/ 中间产物（不进 git）
-docs/           产品文档、技术说明、美术需求、早期打样页面、README 配图
+tools/          build_hd.py 打包美术；bench.ps1 测 CPU；e2e/ 真桌面测试；docs/ 生成 README 配图；
+                release/ 打包前检查和发布到 GitHub；out/ 中间产物（不进 git）
+docs/           产品文档、技术说明、美术需求、早期打样页面、README 配图、每个版本的发布说明（release-notes/）
 ```
 
 ## 现在的限制
@@ -253,7 +280,8 @@ docs/           产品文档、技术说明、美术需求、早期打样页面�
 - 多显示器只认左右挨着的屏幕（上下摆的、隔着一块的，它不会过去）；狗一次只在一块屏幕上，碗跟着它走
 - 目前只有幼犬、经典三色一套素材；长大的样子和其他毛色要等素材（见 `docs/art/asset-spec.md`）。碗还是程序画的
 - 合养要联网；一台电脑只能进一个组；匿名登录没加人机验证，防刷靠 Supabase 按 IP 限次数和服务器函数里的限制
-- 安装包没有数字签名，也还没有自动更新
+- 安装包没有数字签名；有新版本会提醒，但要自己下载安装
+- 一起养连的 Supabase 项目如果是免费档，长时间没人用会被 Supabase 暂停，暂停后大家的「一起养」都连不上（单机的狗不受影响），要维护的人去 Supabase 控制台恢复
 
 ## 字体和许可
 

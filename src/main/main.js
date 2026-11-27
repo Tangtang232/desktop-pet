@@ -1,12 +1,14 @@
 // 主进程：一个铺满工作区（不含任务栏）的透明窗口，默认鼠标点穿；
 // 鼠标移到宠物身上时由渲染进程通知，切成可点击。
-const { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, powerMonitor, safeStorage, clipboard } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, powerMonitor, safeStorage, clipboard, shell, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const logic = require('../renderer/logic.js');
 const deskLayer = require('./desktop-layer.js');
 const Together = require('./together.js');
+const UpdateCheck = require('./update-check.js');
+const pkg = require('../../package.json');
 
 const isDev = process.argv.includes('--dev');
 const isSmoke = process.argv.includes('--smoke');
@@ -31,6 +33,8 @@ let noteWin = null;
 let togetherWin = null;
 // 合养（联网）：没配 Supabase 时是关着的，狗照旧单机过日子
 let together = null;
+// 新版本提醒：只有装好的版本自己定时问；从源码跑的只在你点「检查新版本」时问
+let updater = null;
 let tray = null;
 let hidden = false;
 let latestState = null;
@@ -471,7 +475,9 @@ ipcMain.handle('together:kick', (_e, target, ok) => together ? together.voteKick
 // ---------- 菜单（托盘和右键共用） ----------
 const send = (type, value) => win && win.webContents.send('pet:command', { type, value });
 function buildMenu() {
+  const fresh = updater && updater.latest();
   return Menu.buildFromTemplate([
+    ...(fresh ? [{ label: `有新版本 ${fresh.version}，去下载`, click: () => shell.openExternal(fresh.url) }, { type: 'separator' }] : []),
     { label: '喂一碗', click: () => send('feed') },
     { label: '写张纸条让它带走', click: openNoteWindow },
     { label: '它的日记', click: openDiaryWindow },
@@ -483,9 +489,29 @@ function buildMenu() {
       label: '开机自动启动', type: 'checkbox', checked: app.getLoginItemSettings(loginOpts()).openAtLogin,
       click: item => app.setLoginItemSettings({ openAtLogin: item.checked, ...loginOpts() })
     },
+    ...(updater ? [{ label: `关于（版本 ${app.getVersion()}）`, submenu: [
+      { label: '打开项目主页', click: () => shell.openExternal(updater.page) },
+      { label: '检查新版本', click: () => updater.check(true) }
+    ] }] : []),
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
   ]);
+}
+function balloon(text) {
+  if (tray && process.platform === 'win32') tray.displayBalloon({ title: '桌面比格', content: String(text).slice(0, 120), noSound: true });
+  else console.log('[main] 提示:', text);
+}
+function startUpdater() {
+  const repo = UpdateCheck.parseRepo(pkg);
+  if (!repo) return;
+  updater = UpdateCheck.create({
+    fetch: (url, opts) => net.fetch(url, opts),   // 走系统的网络设置（代理等），和浏览器一样
+    repo, current: app.getVersion(),
+    store: { get: () => readJson('update.json', {}), set: v => writeJson('update.json', v) },
+    notify: balloon,
+    onChange: refreshTray
+  });
+  if (app.isPackaged && !isTestCopy) updater.start();
 }
 // ---------- 纸条：右键地上的纸条、没看的纸条数、看纸条时把窗口临时提到最前面 ----------
 let unreadNotes = 0;
@@ -624,8 +650,9 @@ app.whenReady().then(() => {
   // 测占用的那一份不建托盘图标、不抢快捷键：测完被关掉时不会在托盘里留下一个点不动的图标
   if (!bench && !isTestCopy) createTray();
   if (!bench) startTogether();
+  if (!bench) startUpdater();
   // 真桌面验收测试（PET_E2E=1）：给测试脚本留个口子，能直接开窗口、看合养状态
-  if (process.env.PET_E2E) global.__petMain = { openNoteWindow, openTogetherWindow, get together() { return together; }, get noteWin() { return noteWin; }, get togetherWin() { return togetherWin; }, get layer() { return layer; }, get win() { return win; }, openWatchWindow, get watchWin() { return watchWin; }, openDiaryWindow, get diaryWin() { return diaryWin; }, addDiary };
+  if (process.env.PET_E2E) global.__petMain = { openNoteWindow, openTogetherWindow, get together() { return together; }, get updater() { return updater; }, buildMenu, get noteWin() { return noteWin; }, get togetherWin() { return togetherWin; }, get layer() { return layer; }, get win() { return win; }, openWatchWindow, get watchWin() { return watchWin; }, openDiaryWindow, get diaryWin() { return diaryWin; }, addDiary };
   startWatchdog();
   startIdleWatch();
   startCursorWatch();
@@ -638,5 +665,5 @@ app.whenReady().then(() => {
 });
 app.on('second-instance', () => { if (hidden) toggleHidden(); });
 app.on('before-quit', () => { if (latestState && !isSmoke) writeJson('pet-state.json', latestState); });
-app.on('will-quit', () => { if (together) together.stop(); });
+app.on('will-quit', () => { if (together) together.stop(); if (updater) updater.stop(); });
 app.on('window-all-closed', () => app.quit());

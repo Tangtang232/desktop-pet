@@ -3,14 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "description": "和朋友合养的桌面宠物：一只会在任务栏上活动的 2D 骨骼动画比格",
+  "homepage": "https://github.com/Tangtang232/desktop-pet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tangtang232/desktop-pet.git"
+  },
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "test": "node --test \"test/**/*.test.js\"",
     "smoke": "electron . --smoke",
-    "dist": "electron-builder --win nsis",
-    "dist:dir": "electron-builder --win dir"
+    "dist": "node tools/release/preflight.js && electron-builder --win",
+    "dist:dir": "electron-builder --win dir",
+    "release": "node tools/release/publish.mjs"
   },
   "devDependencies": {
     "electron": "45.5.0",
@@ -42,6 +48,7 @@
     "asarUnpack": [
       "node_modules/koffi/**"
     ],
+    "publish": null,
     "win": {
       "target": [
         {
@@ -49,8 +56,15 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
+      "artifactName": "DesktopPet-${version}-win-${arch}.${ext}",
       "icon": "assets/icons/app.png"
     },
     "nsis": {

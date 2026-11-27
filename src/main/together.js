@@ -21,6 +21,10 @@ function loadConfig(log) {
   for (const f of CONFIG_FILES) {
     try { const v = JSON.parse(fs.readFileSync(f, 'utf8')); if (v && v.url && v.publishableKey) { c = v; break; } } catch {}
   }
+  return c ? checkConfig(c, log) : null;
+}
+// 一份配置能不能用：地址得是 https://<项目>.supabase.co，密钥得是公开密钥。打包前的检查（tools/release/preflight.js）也用它
+function checkConfig(c, log = () => {}) {
   if (!c) return null;
   const key = String(c.publishableKey || '');
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(String(c.url || '')) || !key) return null;
@@ -698,4 +702,4 @@ function create(opts) {
   };
 }
 
-module.exports = { create, loadConfig, ERR_TEXT, _makeVault: makeVault };
+module.exports = { create, loadConfig, checkConfig, ERR_TEXT, _makeVault: makeVault };
