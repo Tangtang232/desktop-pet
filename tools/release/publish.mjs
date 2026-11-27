@@ -98,9 +98,14 @@ async function api(method, url, data, extra = {}) {
 // ---------- 建草稿、传文件、发布 ----------
 const existing = (await api('GET', `/repos/${repo}/releases?per_page=30`)).find(r => r.tag_name === tag);
 if (existing && !existing.draft) fail(`${tag} 已经发布过了：改 package.json 的版本号再发`);
-const rel = existing || await api('POST', `/repos/${repo}/releases`, { tag_name: tag, target_commitish: head, name: `桌面比格 ${version}`, body, draft: true });
-if (existing) await api('PATCH', `/repos/${repo}/releases/${rel.id}`, { target_commitish: head, name: `桌面比格 ${version}`, body });
-say(`${existing ? '接着用' : '建好'}草稿 ${tag}`);
+// 标签已经在 GitHub 上了（推标签触发的云端打包就是这样）：只认这个标签，不再给提交号。
+// 两个都给、或者发布时不带标签，GitHub 会把 Release 挂到一个 untagged-xxx 上（v0.1.0 第一次发布时踩过）
+let tagExists = true;
+try { await api('GET', `/repos/${repo}/git/ref/tags/${encodeURIComponent(tag)}`); } catch { tagExists = false; }
+const where = tagExists ? { tag_name: tag } : { tag_name: tag, target_commitish: head };
+const rel = existing || await api('POST', `/repos/${repo}/releases`, { ...where, name: `桌面比格 ${version}`, body, draft: true });
+if (existing) await api('PATCH', `/repos/${repo}/releases/${rel.id}`, { ...where, name: `桌面比格 ${version}`, body });
+say(`${existing ? '接着用' : '建好'}草稿 ${tag}${tagExists ? '（标签已在 GitHub 上）' : ''}`);
 
 const uploads = [...files.map(f => ({ name: path.basename(f), data: readFileSync(f), type: f.endsWith('.zip') ? 'application/zip' : 'application/octet-stream' })),
   { name: 'SHA256SUMS.txt', data: Buffer.from(sums), type: 'text/plain' }];
@@ -110,5 +115,6 @@ for (const u of uploads) {
   say(`上传 ${u.name}（${(u.data.length / 1048576).toFixed(1)} MB）…`);
   await api('POST', `https://uploads.github.com/repos/${repo}/releases/${rel.id}/assets?name=${encodeURIComponent(u.name)}`, u.data, { 'Content-Type': u.type });
 }
-const done = await api('PATCH', `/repos/${repo}/releases/${rel.id}`, { draft: false, make_latest: 'true' });
+const done = await api('PATCH', `/repos/${repo}/releases/${rel.id}`, { tag_name: tag, draft: false, make_latest: 'true' });
+if (done.tag_name !== tag) fail(`发布了，但 GitHub 把它挂在了 ${done.tag_name} 上，不是 ${tag}：去 Releases 页面编辑一下标签`);
 say(`发布好了：${done.html_url}`);
