@@ -331,12 +331,14 @@ function openNoteWindow() {
   politePopup(noteWin);
   noteWin.on('closed', () => { noteWin = null; });
 }
-// 合养时纸条交给服务器，由它叼去给朋友；没合养时照旧本机演示（叼出去转一圈再叼回来）
-ipcMain.handle('note:info', () => together && together.ready ? together.noteInfo() : { mode: together ? together.view().mode : 'off' });
+// 合养时纸条交给服务器，由它叼去给朋友；没合养时照旧本机演示（叼出去转一圈再叼回来）。
+// 两个人才算一起养：只发了邀请、组里还只有自己时，和没合养一样
+const togetherActive = () => !!together && together.ready && !together.view().alone;
+ipcMain.handle('note:info', () => togetherActive() ? together.noteInfo() : { mode: together ? (together.ready ? 'alone' : together.view().mode) : 'off' });
 ipcMain.handle('note:send', async (_e, text) => {
   const clean = logic.cleanNote(text);
   if (!clean) return { ok: false, error: '纸条是空的' };
-  if (together && together.ready) {
+  if (togetherActive()) {
     const r = await together.sendNote(clean);
     if (r.ok) setTimeout(() => { if (noteWin) noteWin.close(); }, 1600);
     return r;
@@ -696,7 +698,7 @@ function loadPetState() {
     } else if (r.broken) {
       writeDiag({ kind: 'state-lost' });
       setTimeout(() => balloon('存档坏了也没有备份，只好重新开始。坏的那份留在存档目录里了'), 3000);
-    } else if (!r.existed && !settings.welcomed && !isTestCopy) {
+    } else if (!r.existed && !settings.welcomed && (!isTestCopy || process.env.PET_E2E)) {   // 测试副本平时不打招呼；端到端测试要核对这句
       settings.welcomed = true; writeJson('settings.json', settings);
       setTimeout(() => balloon('我住在桌面最底下。右键点我（或者托盘里的这个图标）能喂饭、写纸条、和朋友一起养'), 4000);
     }

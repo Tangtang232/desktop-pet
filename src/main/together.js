@@ -785,7 +785,7 @@ function create(opts) {
     // 测试用：立刻跑一次串门判断、报一次平安、看连接状态
     _brain: brain, _beat: beat,
     _pet: () => pet,
-    _debug: () => ({ phase, rtStatus, channel: channel && channel.state, members: members.length, notes: notes.length, host: pet && pet.host, hostDevice: pet && pet.host_device, me: memberId, uid: myUid, devices: devices.length, kicks: kicks.length })
+    _debug: () => ({ recovery: !!petId && vault.get('recoveryFor') === petId, phase, rtStatus, channel: channel && channel.state, members: members.length, notes: notes.length, host: pet && pet.host, hostDevice: pet && pet.host_device, me: memberId, uid: myUid, devices: devices.length, kicks: kicks.length })
   };
 }
 

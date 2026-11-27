@@ -220,7 +220,7 @@ dist\win-unpacked\DesktopPet.exe --smoke
 node tools/e2e/save-real.mjs
 ```
 
-真桌面测试（会动你的鼠标）和合养的端到端测试（开四个看不见的副本、真连 Supabase）见 [tools/e2e/README.md](tools/e2e/README.md)。
+真桌面测试（会动你的鼠标）、合养的端到端测试（开四个看不见的副本、真连 Supabase）、朋友视角的全流程（两个打包好的程序从第一次打开走到写纸条、退出）、从 0.1.0 升级的测试，见 [tools/e2e/README.md](tools/e2e/README.md)。真连 Supabase 的测试会留下匿名账号，不在任何组里的可以定期清掉。
 
 冒烟测试覆盖不到、要在真桌面上手动看的：托盘和右键菜单、开机启动、Mac。
 

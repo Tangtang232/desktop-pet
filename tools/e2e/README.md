@@ -46,6 +46,26 @@ node tools/e2e/save-real.mjs
 
 开一个看不见、不联网的测试副本，约 1 分钟：页面脚本跑起来、还没读到存档时连着重载两次，存档里的纸条还在；更新版本写的存档原样留着；写坏的存档用 `.bak` 接着养、坏的改名留底。7 项都要过。拿旧版本的目录跑（`PET_ROOT=<目录>`）能看到旧版本在这里丢存档。
 
+## 朋友视角的全流程：`journey-real.mjs`
+
+```
+npm run dist:dir
+node tools/e2e/journey-real.mjs
+```
+
+用打包好的程序（`dist/win-unpacked`）开两台看不见的"刚装好的电脑"，真连 Supabase，约 1 分钟：第一次打开的提示、托盘菜单、检查新版本、复制诊断信息（不碰真的剪贴板）、发起邀请（还没开始一起养）、对方输码申请、同意后开始一起养、写纸条让狗叼过去、对方收到看完、对方退出（回到等朋友加入）、只有自己时写纸条走本机演示、不邀请了（组散掉）。38 项都要过。会留下两个匿名账号。
+
+## 从 0.1.0 升级：`upgrade-real.mjs`
+
+```
+git worktree add --detach <目录> v0.1.0
+mklink /J <目录>\node_modules node_modules
+npm run dist:dir
+$env:PET_OLD='<目录>'; node tools/e2e/upgrade-real.mjs
+```
+
+旧版本开两台建两人组，再把一台换成新打的打包版（同一份存档）：还在组里、身份不变、狗的生日和脾气不变、认出已经开始一起养、认领钥匙交上了，旧版那台照常用。11 项都要过。跑完先 `rmdir <目录>\node_modules`（只删链接）再 `git worktree remove`。
+
 ## 合养（两个人）
 
 见 `docs/m2-together.md` 的"测试"一节。
