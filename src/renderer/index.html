@@ -15,20 +15,51 @@
     #stage { position: fixed; left: 0; right: 0; bottom: 0; height: 100%; }
     /* 画布只有露在窗口里的那么高，贴着底边（高度由脚本设） */
     #stage canvas { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; display: block; }
-    /* 展开的纸条 */
+    /* 展开的纸条：和写纸条窗口同一套信纸——横线、左边红线、纸胶带、手写体 */
+    @font-face { font-family: "PetHand"; src: url("fonts/pet-hand.woff2") format("woff2"); font-display: block; }
     #noteCard {
-      position: absolute; z-index: 5; width: 260px; box-sizing: border-box; padding: 14px 16px 12px;
-      background: var(--paper); color: var(--ink); border: 1.5px solid var(--paper-edge); border-radius: 14px;
-      box-shadow: 0 10px 26px rgba(60, 40, 20, .25); transform-origin: 50% 100%; animation: unfold .22s ease-out;
-      background-image: repeating-linear-gradient(transparent 0 27px, rgba(181, 101, 42, .08) 27px 28px);
+      --hand: "PetHand", "KaiTi", "STKaiti", "Kaiti SC", serif; --line: 30px;
+      position: absolute; z-index: 5; width: 290px; box-sizing: border-box; padding: 22px 18px 12px 32px;
+      color: var(--ink); border: 1px solid var(--paper-edge); border-radius: 6px 6px 10px 10px;
+      box-shadow: 0 10px 26px rgba(60, 40, 20, .25), 0 2px 4px rgba(60, 40, 20, .12); transform-origin: 50% 100%; animation: unfold .26s ease-out;
+      background:
+        linear-gradient(90deg, transparent 22px, rgba(214, 112, 96, .28) 22px 23px, transparent 23px),
+        repeating-linear-gradient(transparent 0 calc(var(--line) - 1px), rgba(176, 122, 70, .16) calc(var(--line) - 1px) var(--line)),
+        radial-gradient(120% 90% at 20% 0%, #FFF9EE 0 55%, #FBF0DC 100%);
+      background-position: 0 0, 0 21px, 0 0;
+    }
+    #noteCard::before {
+      content: ""; position: absolute; top: -11px; left: 50%; width: 84px; height: 22px; transform: translateX(-50%) rotate(-3deg);
+      background: repeating-linear-gradient(90deg, rgba(244, 196, 120, .72) 0 6px, rgba(244, 196, 120, .6) 6px 12px);
+      box-shadow: 0 1px 2px rgba(60, 40, 20, .15); border-radius: 2px;
     }
     #noteCard[hidden] { display: none; }
-    #noteText { font-size: 15px; line-height: 28px; white-space: pre-wrap; word-break: break-word; user-select: text; }
-    #noteFrom { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
-    #noteClose { margin-top: 10px; float: right; font: 600 13px var(--font); border: 0; border-radius: 9px; padding: 4px 14px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+    #noteText { font: 20px/var(--line) var(--hand); white-space: pre-wrap; word-break: break-word; user-select: text; min-height: var(--line); }
+    #noteFrom { margin-top: 4px; font: 18px/1.5 var(--hand); color: var(--ink-soft); text-align: right; }
+    #noteFrom:empty { display: none; }
+    #noteClose { margin-top: 8px; float: right; font: 600 13px var(--font); border: 0; border-radius: 9px; padding: 4px 14px; background: var(--accent); color: var(--accent-ink); cursor: pointer; box-shadow: 0 2px 0 rgba(120, 60, 20, .35); }
     #noteClose:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @keyframes unfold { from { transform: scale(.6) rotate(-4deg); opacity: 0; } to { transform: none; opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) { #noteCard { animation: none; } }
+    /* 小气泡：点碗时"它在谁那儿"、被呼唤时"让它去 / 再玩一会儿"、有人远程喂了一碗。和纸条同一套纸和手写体 */
+    #bubble {
+      --hand: "PetHand", "KaiTi", "STKaiti", "Kaiti SC", serif;
+      position: absolute; z-index: 6; max-width: 260px; box-sizing: border-box; padding: 10px 14px 10px;
+      color: var(--ink); background: radial-gradient(120% 90% at 20% 0%, #FFF9EE 0 55%, #FBF0DC 100%);
+      border: 1px solid var(--paper-edge); border-radius: 12px; box-shadow: 0 8px 20px rgba(60, 40, 20, .22), 0 2px 4px rgba(60, 40, 20, .1);
+      transform-origin: 50% 100%; animation: unfold .2s ease-out;
+    }
+    #bubble::after { content: ""; position: absolute; left: var(--tail, 50%); bottom: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg);
+      background: #FBF0DC; border-right: 1px solid var(--paper-edge); border-bottom: 1px solid var(--paper-edge); }
+    #bubble[hidden] { display: none; }
+    #bubbleText { font: 19px/1.45 var(--hand); }
+    #bubbleBtns { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
+    #bubbleBtns:empty { display: none; }
+    #bubbleBtns button { font: 600 13px var(--font); border: 0; border-radius: 9px; padding: 4px 12px; cursor: pointer; }
+    #bubbleBtns button.go { background: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 0 rgba(120, 60, 20, .35); }
+    #bubbleBtns button.ghost { background: rgba(181, 101, 42, .12); color: var(--ink); }
+    #bubbleBtns button:disabled { opacity: .45; cursor: default; }
+    #bubbleBtns button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { #noteCard, #bubble { animation: none; } }
   </style>
 </head>
 <body>
@@ -40,10 +71,18 @@
       <div id="noteFrom"></div>
       <button type="button" id="noteClose">收好</button>
     </div>
+    <div id="bubble" hidden role="status">
+      <div id="bubbleText"></div>
+      <div id="bubbleBtns"></div>
+    </div>
   </div>
   <script src="../../assets/beagle/puppy/rig-data.js"></script>
   <script src="rig.js"></script>
+  <script src="rise.js"></script>
+  <script src="turn.js"></script>
   <script src="logic.js"></script>
+  <script src="mind.js"></script>
+  <script src="grow.js"></script>
   <script src="pet.js"></script>
 </body>
 </html>

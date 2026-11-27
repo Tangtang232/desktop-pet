@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIB = os.path.join(ROOT, 'assets', 'beagle', 'hd-library')
 POSES = ['stand', 'sit', 'prone', 'sleep']
 # turn（正面转身）不打包：2026-11-25 试过，转身时出现正脸看着怪，改回原地翻面
-TRANSITIONS = ['crouch', 'lie-down', 'curl']
+TRANSITIONS = ['crouch', 'lie-down', 'curl', 'turn-back']
 POINT_KEYS = ['pivot', 'joint', 'foot', 'tip', 'chest', 'hip', 'belly', 'neckBase']
 
 
@@ -109,6 +109,11 @@ def build(age, scale):
         }
         if 'facePoints' in rig:
             out['poses'][pose]['facePoints'] = {name: pt(p) for name, p in rig['facePoints'].items()}
+        if rig.get('turnFace'):
+            face_image = load_rgba(os.path.join(pdir, rig['turnFace']))
+            url = data_url(shrink(face_image, scale))
+            out['poses'][pose]['turnFace'] = {'src': url, 'w': face_image.width, 'h': face_image.height}
+            total += len(url)
         print(f'  {pose}: {len(layers)} 层，范围 {union}，地面 {rig["ground"]}')
 
     def face_img(rel):

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>看看它</title>
+  <link rel="stylesheet" href="note.css">
+  <style>
+    .paper { grid-template-rows: auto auto 1fr auto; padding: 22px 22px 16px 34px; }
+    .paper::after { bottom: 14px; }
+    .top { display: flex; align-items: baseline; }
+    .top .drag { flex: 1; }
+    .x { -webkit-app-region: no-drag; border: 0; background: transparent; color: var(--ink-soft); font: 20px var(--ui); padding: 0 4px; cursor: pointer; }
+    .where { font: 20px/1.4 var(--hand); color: var(--ink); margin-top: 2px; }
+    .view { min-height: 0; display: grid; place-items: center; }
+    .view img { max-width: 100%; max-height: 150px; image-rendering: auto; filter: drop-shadow(0 3px 4px rgba(60, 40, 20, .18)); }
+    .hint { font: 17px/1.5 var(--hand); color: var(--ink-soft); text-align: center; }
+    .bar { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+    .bar .err { flex: 1; color: #B23A2A; font-size: 13px; }
+    button.small { padding: 4px 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="paper">
+    <div class="top"><div class="drag">看看它</div><button class="x" id="close" title="关上" aria-label="关上">×</button></div>
+    <div class="where" id="where">正在连上……</div>
+    <div class="view" id="view"><div class="hint">等它那边传画面过来……</div></div>
+    <div class="bar">
+      <span class="err" id="err" role="alert"></span>
+      <button type="button" class="ghost small" id="feed">喂一碗</button>
+      <button type="button" class="go small" id="call">叫它回来</button>
+    </div>
+  </div>
+  <script src="watch.js"></script>
+</body>
+</html>

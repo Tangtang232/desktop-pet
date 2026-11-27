@@ -64,16 +64,28 @@ test('自由活动：累了更常趴和睡，不会选回当前姿势', () => {
   assert.equal(tired.lie, undefined);
 });
 
-test('自由活动：无聊又有精神时更常邀你玩', () => {
-  const bored = sample('idle', { energy: 0.9, boredom: 0.95, attention: 0 }, {});
-  const calm = sample('idle', { energy: 0.9, boredom: 0.0, attention: 0 }, {});
+test('自由活动：无聊又有精神时更常邀你玩；人不在、刚睡醒迷糊时很少邀玩', () => {
+  const here = { userPresent: true };
+  const bored = sample('idle', { energy: 0.9, boredom: 0.95, attention: 0 }, here);
+  const calm = sample('idle', { energy: 0.9, boredom: 0.0, attention: 0 }, here);
   assert.ok((bored.bow || 0) > (calm.bow || 0) + 300, JSON.stringify({ bored, calm }));
+  const alone = sample('idle', { energy: 0.9, boredom: 0.95, attention: 0 }, {});
+  assert.ok((alone.bow || 0) < (bored.bow || 0) / 3, JSON.stringify({ alone, bored }));
+  const groggy = sample('idle', { energy: 0.9, boredom: 0.95, attention: 0 }, { userPresent: true, drowsy: 0.6 });
+  assert.equal(groggy.bow, undefined);
 });
 
 test('自由活动：人在且很想被理时会去找你，人不在时不会', () => {
   const needy = { energy: 0.8, boredom: 0.2, attention: 0.9 };
   assert.ok((sample('idle', needy, { userPresent: true }).seek || 0) > 1000);
   assert.equal(sample('idle', needy, { userPresent: false }).seek, undefined);
+  assert.equal(sample('idle', needy, { userPresent: true, seekCooldown: true }).seek, undefined, '刚被晾过，先不来');
+});
+
+test('需求：人在却没人理，"想被理"大约 20 分钟才攒到想去找你', () => {
+  const n = { energy: 0.8, boredom: 0.2, attention: 0 };
+  assert.ok(L.tickNeeds(n, 8 * 60, { userPresent: true }).attention < 0.45);
+  assert.ok(L.tickNeeds(n, 12 * 60, { userPresent: true }).attention > 0.45);
 });
 
 test('人离开电脑：默认 5 分钟没动算离开，可以改阈值', () => {
@@ -106,6 +118,11 @@ test('存档校验：坏数据被拒或被夹回范围', () => {
   assert.deepEqual(s.groundNote, { text: 'hi', x: 1 });
 });
 
+test('存档校验：纸条保留"没看"标记，坏字段被清掉', () => {
+  const s = L.sanitizeState({ v: 1, savedAt: 5, notes: [{ text: ' 你好 ', at: 3, unread: true }, { text: 'b', unread: 'yes' }, { nope: 1 }, null] });
+  assert.deepEqual(s.notes, [{ text: '你好', at: 3, unread: true }, { text: 'b', at: 0, unread: false }]);
+});
+
 test('狗的大小：按工作区高度的 13%，限制在 110 到 220', () => {
   assert.equal(L.petHeightFor(1040), 1040 * 0.13);
   assert.equal(L.petHeightFor(500), 110);
@@ -132,4 +149,10 @@ test('纸条：去控制字符、合并空行、截到 120 个字', () => {
   assert.equal(L.cleanNote('狗'.repeat(200)).length, 120);
   assert.equal(L.cleanNote(42), '');
   assert.equal(Array.from(L.cleanNote('🐶'.repeat(130))).length, 120);
+});
+
+test('自由活动：只会从趴着犯困睡过去，坐着不会直接睡', () => {
+  const tired = { energy: 0.05, boredom: 0.1, attention: 0 };
+  assert.equal(sample('sit', tired, { night: true }).sleep, undefined);
+  assert.ok((sample('lie', tired, { night: true }).sleep || 0) > 1000);
 });

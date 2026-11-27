@@ -8,9 +8,64 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "test": "node --test \"test/**/*.test.js\"",
-    "smoke": "electron . --smoke"
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --win dir"
   },
   "devDependencies": {
-    "electron": "45.5.0"
+    "electron": "45.5.0",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
+    "koffi": "^3.3.8"
+  },
+  "productName": "桌面比格",
+  "build": {
+    "appId": "com.desktoppet.beagle",
+    "productName": "桌面比格",
+    "executableName": "DesktopPet",
+    "copyright": "桌面比格",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "package.json",
+      "src/**/*",
+      "assets/beagle/puppy/rig-data.js",
+      "assets/icons/**/*",
+      "config/supabase.json",
+      "!**/*.map",
+      "!**/*.md",
+      "src/renderer/fonts/OFL.txt"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/app.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "shortcutName": "桌面比格",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "DesktopPet-Setup-${version}.${ext}"
+    },
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ]
   }
 }

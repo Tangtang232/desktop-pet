@@ -1,7 +1,8 @@
-// 写纸条窗口只需要"送出"和"取消"两个接口。
+// 写纸条窗口：送出、取消，以及"寄给谁、它会怎么送"（合养时）。
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('noteApi', {
-  send: text => ipcRenderer.send('note:send', String(text)),
+  info: () => ipcRenderer.invoke('note:info'),
+  send: text => ipcRenderer.invoke('note:send', String(text)),
   cancel: () => ipcRenderer.send('note:cancel')
 });

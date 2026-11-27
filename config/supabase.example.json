@@ -1,0 +1,5 @@
+{
+  "_说明": "要用合养：把这个文件复制成 config/supabase.json，填上自己 Supabase 项目的地址和公开密钥（打包时会带进安装包，但不进 git）。开发时想临时连另一个项目，复制成 supabase.local.json，它优先。只填公开密钥（Publishable key），Secret / service_role 绝不放进客户端",
+  "url": "https://<项目 ID>.supabase.co",
+  "publishableKey": "<Publishable key>"
+}

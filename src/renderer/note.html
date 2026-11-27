@@ -8,14 +8,14 @@
 </head>
 <body>
   <form class="paper" id="form">
-    <div class="drag">写张纸条，让它叼过去</div>
-    <textarea id="text" maxlength="120" placeholder="想说点什么？" autofocus></textarea>
+    <div class="drag" id="head">写张纸条</div>
+    <textarea id="text" maxlength="160" placeholder="想说点什么？" autofocus></textarea>
     <div class="row">
       <span class="count" id="count">0 / 120</span>
       <button type="button" class="ghost" id="cancel">算了</button>
       <button type="submit" class="go" id="send" disabled>交给它</button>
     </div>
-    <p class="hint">现在还没接上朋友，它会出门转一圈，再把纸条叼回来给你看。Ctrl+Enter 也能送出。</p>
+    <p class="hint" id="hint"></p>
   </form>
   <script src="note.js"></script>
 </body>

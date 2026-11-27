@@ -23,7 +23,7 @@
   }
 
   // ---------- 三个看不见的需求 ----------
-  // energy 精力：醒着慢慢掉，晚上掉得快，睡觉回；boredom 无聊：没人陪玩慢慢涨；attention 想被理：人在电脑前却没理它时慢慢涨
+  // energy 精力：醒着慢慢掉，晚上掉得快，睡觉回；boredom 无聊：没人陪玩慢慢涨；attention 想被理：人在电脑前却没理它时慢慢涨（约 20 分钟涨满）
   function initNeeds() {
     return { energy: 0.8, boredom: 0.2, attention: 0.15 };
   }
@@ -32,11 +32,11 @@
     const speed = ctx.speed || 1;
     const d = dt * speed;
     if (ctx.sleeping) n.energy += d / (40 * 60);
-    else n.energy -= (d / ((ctx.active ? 50 : 90) * 60)) * (ctx.night ? 1.6 : 1);
+    else n.energy -= (d / ((ctx.active ? 50 : 90) * 60)) * (ctx.night ? 1.6 : 1) * (ctx.drainMul || 1);   // drainMul：活泼的累得快（养成里的特质）
     if (ctx.playing) n.boredom -= d / 40;
     else if (!ctx.sleeping) n.boredom += d / (6 * 60);
     if (ctx.interacted) n.attention -= d / 8;
-    else if (ctx.userPresent && !ctx.sleeping) n.attention += d / (5 * 60);
+    else if (ctx.userPresent && !ctx.sleeping) n.attention += d / (20 * 60) * (ctx.attentionMul || 1);   // 人在却没理它：大约 20 分钟攒满（以前 5 分钟，没人理时一两分钟就来找一次）
     else n.attention -= d / (20 * 60);
     n.energy = clamp(n.energy, 0, 1);
     n.boredom = clamp(n.boredom, 0, 1);
@@ -61,14 +61,17 @@
     const tired = 1 - needs.energy;
     // 累了更想趴、想睡；晚上更明显
     w.lie = (w.lie || 0) + tired * 3;
-    w.sleep = (w.sleep || 0) + (cur === 'lie' || cur === 'sit' ? tired * 4 : 0) * (ctx.night ? 1.8 : 1);
+    w.sleep = (w.sleep || 0) + (cur === 'lie' ? tired * 4 : 0) * (ctx.night ? 1.8 : 1);   // 只从趴着犯困睡过去，不会坐着、站着直接睡
     if (needs.energy > 0.6) w.sleep = (w.sleep || 0) * 0.2;
-    // 无聊了想玩
-    w.bow = (w.bow || 0) + needs.boredom * 3 * needs.energy;
+    // 无聊了想玩：邀玩要有个玩伴，人不在时多半自己溜达、闻闻；刚睡醒还迷糊（ctx.drowsy）也不想玩
+    w.bow = ((w.bow || 0) + needs.boredom * 3 * needs.energy) * (ctx.userPresent ? 1 : 0.15) * Math.max(0, 1 - 2 * (ctx.drowsy || 0));
     w.walk = (w.walk || 0) + needs.boredom * 1.5 * needs.energy;
     w.sniff = (w.sniff || 0) + needs.boredom * needs.energy;
     // 人在却没人理：去鼠标那儿坐着看你
-    if (ctx.userPresent && needs.attention > 0.45) w.seek = needs.attention * 6;
+    // 刚找过你、你没空理它（seekCooldown）：死心一阵，先不来了
+    if (ctx.userPresent && !ctx.seekCooldown && needs.attention > 0.45) w.seek = needs.attention * 6;
+    // 特质、性格（养成）：活泼的多走、慵懒的多趴、好奇的多闻、黏人的多来找你
+    if (ctx.mul) for (const k of Object.keys(ctx.mul)) if (w[k] && ctx.mul[k] > 0) w[k] *= ctx.mul[k];
     delete w[cur];
     for (const k of Object.keys(w)) if (!(w[k] > 0)) delete w[k];
     return w;
@@ -104,8 +107,16 @@
       belly: clamp(num(s.belly, 0.5), 0, 1),
       food: clamp(num(s.food, 0), 0, 1),
       needs: initNeeds(),
-      notes: Array.isArray(s.notes) ? s.notes.filter(n => n && typeof n.text === 'string').slice(-20) : [],
-      groundNote: s.groundNote && typeof s.groundNote.text === 'string' ? { text: cleanNote(s.groundNote.text), x: clamp(num(s.groundNote.x, 0.5), 0, 1) } : null
+      notes: Array.isArray(s.notes) ? s.notes.filter(n => n && typeof n.text === 'string').slice(-20)
+        .map(n => ({ text: cleanNote(n.text), at: num(n.at, 0), unread: n.unread === true,
+          // 合养：谁写的、服务器上的纸条 id（托盘里看了再报已读）
+          ...(typeof n.from === 'string' && n.from.trim() ? { from: Array.from(n.from.trim()).slice(0, 12).join('') } : {}),
+          ...(typeof n.noteId === 'string' && /^[0-9a-f-]{36}$/.test(n.noteId) ? { noteId: n.noteId } : {}) })) : [],
+      groundNote: s.groundNote && typeof s.groundNote.text === 'string' ? { text: cleanNote(s.groundNote.text), x: clamp(num(s.groundNote.x, 0.5), 0, 1) } : null,
+      // 碗被你摆在哪（占屏幕宽度的比例）；没摆过就是 null，用默认位置
+      bowl: typeof s.bowl === 'number' && isFinite(s.bowl) ? clamp(s.bowl, 0, 1) : null,
+      // 养成（特质种子、性格、胖瘦、发现了哪些特质）：页面用 grow.js 细查，这里只防太大
+      grow: s.grow && typeof s.grow === 'object' && JSON.stringify(s.grow).length < 4000 ? s.grow : null
     };
     if (s.needs && typeof s.needs === 'object') {
       out.needs = {

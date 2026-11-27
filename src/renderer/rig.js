@@ -28,7 +28,7 @@ function localM(b) {
 // ---------- WebGL ----------
 function createRenderer(cv) {
   // 不开抗锯齿、不保留上一帧：整只狗是先画进离屏层再贴上来的，屏幕这层不需要这两样，省掉每帧一整屏的拷贝
-  const opts = { premultipliedAlpha: true, alpha: true, antialias: false, preserveDrawingBuffer: false };
+  const opts = { premultipliedAlpha: true, alpha: true, depth: false, antialias: false, preserveDrawingBuffer: false };
   let gl = null, gl2 = false;
   try { gl = cv.getContext('webgl2', opts); gl2 = !!gl; } catch (e) { gl = null; }
   if (!gl) gl = cv.getContext('webgl', opts);
@@ -39,11 +39,15 @@ function createRenderer(cv) {
     return s;
   };
   const prog = gl.createProgram();
-  gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 aP;attribute vec2 aU;uniform vec2 uO;uniform vec2 uR;varying vec2 vU;void main(){vU=aU;vec2 c=(aP-uO)/uR*2.0-1.0;gl_Position=vec4(c.x,-c.y,0.0,1.0);}'));
-  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec2 vU;uniform sampler2D uT;uniform float uA;void main(){gl_FragColor=texture2D(uT,vU)*uA;}'));
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 aP;attribute vec2 aU;attribute vec2 aU2;attribute vec2 aF;uniform vec2 uO;uniform vec2 uR;varying vec2 vU;varying vec2 vU2;varying vec2 vF;void main(){vU=aU;vU2=aU2;vF=aF;vec2 c=(aP-uO)/uR*2.0-1.0;gl_Position=vec4(c.x,-c.y,0.0,1.0);}'));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec2 vU;varying vec2 vU2;uniform sampler2D uT;uniform sampler2D uT2;uniform float uA;uniform float uMix;varying vec2 vF;void main(){vec4 col=texture2D(uT,vU);if(uMix!=0.0){col=mix(col,texture2D(uT2,vU2),uMix<0.0?vF.x:uMix);if(uMix<0.0)col*=1.0-vF.y;}gl_FragColor=col*uA;}'));
   gl.linkProgram(prog); gl.useProgram(prog);
   const aP = gl.getAttribLocation(prog, 'aP'), aU = gl.getAttribLocation(prog, 'aU');
   const uO = gl.getUniformLocation(prog, 'uO'), uR = gl.getUniformLocation(prog, 'uR'), uA = gl.getUniformLocation(prog, 'uA');
+  const aU2 = gl.getAttribLocation(prog, 'aU2'), uT2 = gl.getUniformLocation(prog, 'uT2'), uMix = gl.getUniformLocation(prog, 'uMix');
+  // 两个基础顶点属性在整次渲染会话中始终启用；姿势混合只切换自己的额外属性。
+  gl.enableVertexAttribArray(aP); gl.enableVertexAttribArray(aU);
+  let lastOpacity = -1;
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
 
@@ -68,10 +72,29 @@ function createRenderer(cv) {
   }
   const quad = () => bufs({ pos: new Float32Array(8), uv: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), idx: new Uint16Array([0, 1, 2, 0, 2, 3]) });
   function drawMesh(m, t, alpha) {
-    gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1f(uA, alpha == null ? 1 : alpha);
-    gl.bindBuffer(gl.ARRAY_BUFFER, m.pb); gl.bufferData(gl.ARRAY_BUFFER, m.pos, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, m.ub); gl.enableVertexAttribArray(aU); gl.vertexAttribPointer(aU, 2, gl.FLOAT, false, 0, 0);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    const opacity = alpha == null ? 1 : alpha;
+    if (opacity !== lastOpacity){ gl.uniform1f(uA, opacity); lastOpacity = opacity; }
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.pb); gl.bufferData(gl.ARRAY_BUFFER, m.pos, gl.DYNAMIC_DRAW); gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.ub); gl.vertexAttribPointer(aU, 2, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.drawElements(gl.TRIANGLES, m.idx.length, gl.UNSIGNED_SHORT, 0);
+  }
+  // 两幅分层贴图有不同的 UV，使用同一组屏幕顶点，在一个片元里混合预乘颜色。
+  const aF = gl.getAttribLocation(prog, 'aF');
+  let fadeBuffer;
+  function drawMatched(a, b, textureA, textureB, progress, alpha, fades) {
+    if (fades) {
+      fadeBuffer ||= gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, fadeBuffer);
+      // 首分量让两张纹理在同一个轮廓上交接，可选第二分量只羽化新生成的边沿。
+      const components = fades.length===a.pos.length ? 2 : 1;
+      gl.bufferData(gl.ARRAY_BUFFER, fades, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(aF); gl.vertexAttribPointer(aF,components,gl.FLOAT,false,0,0);
+    }
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, textureB);
+    gl.activeTexture(gl.TEXTURE0); gl.uniform1i(uT2, 1); gl.uniform1f(uMix, fades ? -1 : progress);
+    gl.bindBuffer(gl.ARRAY_BUFFER, b.ub); gl.enableVertexAttribArray(aU2); gl.vertexAttribPointer(aU2, 2, gl.FLOAT, false, 0, 0);
+    drawMesh(a, textureA, alpha);
+    if (fades) gl.disableVertexAttribArray(aF);
+    gl.disableVertexAttribArray(aU2); gl.uniform1f(uMix, 0); gl.uniform1i(uT2, 0);
   }
   // 离屏层：整只狗先画进一张贴图，再整体按透明度贴到屏幕上（变淡、换姿势时不会透出身体后面的腿）
   const target = () => ({ fb: null, t: null, w: 0, h: 0 });
@@ -106,7 +129,7 @@ function createRenderer(cv) {
     const p = flipQuad.pos; p[0] = x; p[1] = y; p[2] = x + w; p[3] = y; p[4] = x + w; p[5] = y + h; p[6] = x; p[7] = y + h;
     drawMesh(flipQuad, tg.t, alpha);
   }
-  return { gl, gl2, setView, tex, bufs, quad, drawMesh, target, bindTarget, bindScreen, drawTarget, setClip };
+  return { gl, gl2, setView, tex, bufs, quad, drawMesh, drawMatched, target, bindTarget, bindScreen, drawTarget, setClip };
 }
 
 // ---------- 读图、建网格 ----------
@@ -116,17 +139,15 @@ function loadImage(src) {
 function alphaOf(im) {
   const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
   const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0);
-  return x.getImageData(0, 0, im.width, im.height).data;
+  const pixels = x.getImageData(0, 0, im.width, im.height).data;
+  c.width = c.height = 0;
+  return pixels;
 }
 // 按网格切图层，只保留有像素的格子；每个顶点记下各骨骼的权重
-function buildMesh(R, layer, im, wf, bones, grid) {
-  const W = layer.w, H = layer.h, sx = im.width / W, sy = im.height / H, al = alphaOf(im), iw = im.width, ih = im.height;
+function buildMesh(R, layer, im, wf, bones, grid, al) {
+  const W = layer.w, H = layer.h, sx = im.width / W, sy = im.height / H, iw = im.width, ih = im.height;
   const nx = Math.ceil(W / grid), ny = Math.ceil(H / grid);
   const rest = [], uv = [], wts = [], idx = [];
-  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
-    const u = Math.min(i * grid, W), v = Math.min(j * grid, H), cx = layer.x + u, cy = layer.y + v;
-    rest.push(cx, cy); uv.push(u / W, v / H); wts.push(wf(cx, cy));
-  }
   const used = (i0, j0) => {
     const x0 = Math.max(0, Math.floor(i0 * grid * sx) - 1), x1 = Math.min(iw, Math.ceil((i0 + 1) * grid * sx) + 1);
     const y0 = Math.max(0, Math.floor(j0 * grid * sy) - 1), y1 = Math.min(ih, Math.ceil((j0 + 1) * grid * sy) + 1);
@@ -139,7 +160,18 @@ function buildMesh(R, layer, im, wf, bones, grid) {
     const a = j * (nx + 1) + i, b = a + 1, d = a + nx + 1, e = d + 1;
     idx.push(a, b, e, a, e, d); vUsed[a] = vUsed[b] = vUsed[d] = vUsed[e] = 1;
   }
-  return R.bufs({ rest: new Float32Array(rest), wts, bones, vUsed, pos: new Float32Array(rest.length), uv: new Float32Array(uv), idx: new Uint16Array(idx) });
+  // 全透明的格子不产生三角形，也不需要骨骼权重、逐帧蒙皮和上传。
+  const vertex = new Uint32Array(vUsed.length);
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++){
+    const index = j * (nx+1) + i;
+    if (!vUsed[index]) continue;
+    const u = Math.min(i*grid, W), v = Math.min(j*grid, H);
+    const x = layer.x + u, y = layer.y + v;
+    vertex[index] = wts.length;
+    rest.push(x,y); uv.push(u/W,v/H); wts.push(wf(x,y));
+  }
+  const indices = Uint16Array.from(idx, i => vertex[i]);
+  return R.bufs({ rest:new Float32Array(rest), wts, bones, pos:new Float32Array(rest.length), uv:new Float32Array(uv), idx:indices });
 }
 function segProj(x, y, a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
@@ -153,6 +185,7 @@ async function buildKit(R, data) {
   if (!F) return null;
   const kit = { w: F.w, h: F.h, points: F.points, eyes: {}, mouths: {}, note: null, lipTex: null, noteCfg: data.note || null };
   const headIm = await loadImage(F.head);
+  kit.headImage = headIm;
   kit.headTex = R.tex(headIm, null, true);
   for (const g of ['eyes', 'mouths']) {
     for (const [k, e] of Object.entries(F[g])) {
@@ -173,9 +206,38 @@ async function buildKit(R, data) {
     x.drawImage(headIm, 0, 0, F.w, F.h);
     const m = kit.mouths.hold; x.drawImage(m.im, m.x, m.y, m.w, m.h);
     kit.lipTex = R.tex(c, null, true);
+    c.width = c.height = 0;
   }
-  // 图都传到显卡了，页面里解码好的图片不再留着
-  for (const g of ['eyes', 'mouths']) for (const v of Object.values(kit[g])) delete v.im;
+  // 回头时要让眼睛、嘴跟着同一张脸的曲面变形。仅表情改变时重绘一张小纹理。
+  let faceCanvas, context, faceKey, uploadedKey, faceTexture;
+  kit.faceImage = face => {
+    const key = [face.eye,face.eyeP,face.eyeF,face.mouth,face.mouthP,face.mouthF,face.carry].join('/');
+    if (faceCanvas && faceKey === key) return faceCanvas;
+    if (!faceCanvas) {
+      faceCanvas = document.createElement('canvas'); faceCanvas.width = headIm.width; faceCanvas.height = headIm.height;
+      // 像素只作为纹理上传，不把这张中间画布交给窗口合成器。
+      context = faceCanvas.getContext('2d', {willReadFrequently:true}); context.scale(headIm.width / kit.w, headIm.height / kit.h);
+    }
+    context.clearRect(0,0,kit.w,kit.h); context.drawImage(headIm,0,0,kit.w,kit.h);
+    for (const [group,cur,prev,f] of [[kit.eyes,face.eye,face.eyeP,face.eyeF],[kit.mouths,face.carry ? 'hold' : face.mouth,face.mouthP,face.mouthF]]) {
+      const a = group[cur], b = group[prev];
+      if (a) context.drawImage(a.im,a.x,a.y,a.w,a.h);
+      if (b && prev !== cur && f < 1) { context.globalAlpha = 1-f; context.drawImage(b.im,b.x,b.y,b.w,b.h); context.globalAlpha = 1; }
+    }
+    faceKey = key; kit.faceRevision = key; return faceCanvas;
+  };
+  kit.releaseFaceCanvas = () => {
+    if(!faceCanvas)return;
+    faceCanvas.width=faceCanvas.height=0;
+    faceCanvas=context=faceKey=kit.faceRevision=null;
+  };
+  kit.curvedFace = face => {
+    const image = kit.faceImage(face);
+    if (!faceTexture || uploadedKey !== faceKey) {
+      faceTexture = R.tex(image,faceTexture,true); uploadedKey = faceKey;
+    }
+    return faceTexture;
+  };
   return kit;
 }
 
@@ -267,15 +329,20 @@ async function buildSet(R, name, P, kit) {
 
   const ts = 1; // 网格格子按素材原图像素算
   const layers = [], yawRows = {};
+  let sweepHead, sweepEar;
   for (const l of P.layers) {
     if (l.id === 'head') {
-      let t = null;
-      if (l.shared) t = kit && kit.headTex;
-      else t = R.tex(await loadImage(l.src), null, true);
-      layers.push({ id: 'head', kind: 'head', tex: t });
+      const im = l.shared ? kit?.headImage : await loadImage(l.src);
+      if (name==='prone' || name==='curl') sweepHead = {layer:l,image:im};
+      const t = l.shared ? kit?.headTex : R.tex(im, null, true);
+      const points = l.shared ? kit?.points : P.facePoints;
+      const profile = im && root.PetRiseMotion?.headProfile(R,name,l,im,points,chestC[0] < hipC[0],kit);
+      const turnSection=name==='stand' && im ? root.PetTurn?.contour(name,l,im,alphaOf(im)) : null;
+      layers.push({ id: 'head', kind: 'head', tex:t, profile, turnSection });
       continue;
     }
     const im = await loadImage(l.src);
+    if ((name==='prone'||name==='curl') && l.id==='ear') sweepEar = {layer:l,image:im};
     if (name === 'turn') yawRows[l.id] = turnRows(l, im);
     let wf, bs, grid = 22 * ts;
     if (l.id === 'body') { wf = bodyW; bs = ['hip', 'chest', 'belly', 'neck']; grid = 26 * ts; }
@@ -283,7 +350,9 @@ async function buildSet(R, name, P, kit) {
     else if (l.id === 'ear') { wf = earW; bs = ['ear0', 'ear1']; }
     else if (LEGS[l.id]) { const n = LEGS[l.id]; wf = legW(legs[n]); bs = [n + 'U', n + 'L']; }
     else { const p = l.parent && bones[l.parent] ? l.parent : 'body'; wf = () => [1]; bs = [p]; }
-    layers.push({ id: l.id, kind: 'mesh', mesh: buildMesh(R, l, im, wf, bs, grid), tex: R.tex(im, null, true) });
+    const pixels = alphaOf(im);
+    const profile = root.PetRiseMotion?.profile(R, name, l, im, pixels, wf, bs, chestC[0] < hipC[0]);
+    layers.push({ id: l.id, kind: 'mesh', mesh: buildMesh(R, l, im, wf, bs, grid, pixels), tex: R.tex(im, null, true), profile, turnSection:root.PetTurn?.contour(name,l,im,pixels) });
   }
   if (name === 'turn') prepareTurnProjection(ax, layers, L, yawRows);
   // 头部局部坐标（表情零件、叼物点用的坐标）→ 画布坐标：先放到 (x,y)，再绕枢轴转 rotation
@@ -305,6 +374,15 @@ async function buildSet(R, name, P, kit) {
     defaultFace: P.face || null, earPivot: e0
   };
   setAnchor(set, ax);
+  if(name==='sleep' || name==='curl'){
+    const tail=layers.find(l=>l.id==='tail');
+    const head=layers.find(l=>l.id==='head');
+    if(tail && head) {layers.splice(layers.indexOf(tail),1);layers.splice(layers.indexOf(head),0,tail);}
+  }
+  if (sweepHead?.image && sweepEar && root.PetRiseMotion?.faceView){
+    const front = P.turnFace?.src ? await loadImage(P.turnFace.src) : null;
+    set.faceView = root.PetRiseMotion.faceView(R,set,sweepHead,sweepEar,kit,front);
+  }
   return set;
 }
 
@@ -341,11 +419,12 @@ function delta(S, O, k, w, facing) {
   const a = rel(S, S.lm[k]), b = rel(O, O.lm[k]), m = S.mirror ? -1 : 1;
   return [(b[0] * facing - a[0]) * m * w, (b[1] - a[1]) * w];
 }
-// 让 S 这套图的臀、胸、肚子、头、尾巴朝 O 那套图的位置挪 w（0~1）
-function morphToward(S, O, w, facing = 1) {
-  if (!O || O === S || !(w > 0)) return;
+// 让 S 这套图的臀、胸、肚子、头、尾巴朝 O 那套图的位置挪 w（0~1）。
+// wr 是后半身（臀、尾巴）的进度，不给就和前半身一样；起身、趴下时前后不同步，动作才像真狗
+function morphToward(S, O, w, facing = 1, wr = w) {
+  if (!O || O === S || (!(w > 0) && !(wr > 0))) return;
   const B = S.bones, mS = S.mirror ? -1 : 1, mO = (O.mirror ? -1 : 1) * facing;
-  const dh = delta(S, O, 'hip', w, facing), dc = delta(S, O, 'chest', w, facing), db = delta(S, O, 'belly', w, facing), dd = delta(S, O, 'eye', w, facing);
+  const dh = delta(S, O, 'hip', wr, facing), dc = delta(S, O, 'chest', w, facing), db = delta(S, O, 'belly', (w + wr) / 2, facing), dd = delta(S, O, 'eye', w, facing);
   // 两张头的转轴可能在不同位置。以实际眼位衔接，补偿头绕脖子转动时产生的位移。
   const headAngle = w * (O.lm.headRot * mO - S.lm.headRot * mS) * mS;
   const ex = S.lm.eye[0] - S.headP[0], ey = S.lm.eye[1] - S.headP[1], er = ap(Rm(headAngle), ex, ey);
@@ -372,10 +451,10 @@ function morphToward(S, O, w, facing = 1) {
   B.neck.tx += dd[0] - dc[0]; B.neck.ty += dd[1] - dc[1];
   B.head.rot += headAngle;
   if (B.tail0 && S.lm.tail && O.lm.tail) {
-    const dt = delta(S, O, 'tail', w, facing);
+    const dt = delta(S, O, 'tail', wr, facing);
     B.tail0.tx += dt[0] - dh[0]; B.tail0.ty += dt[1] - dh[1];
     const ang = (X, sign) => { const a = rel(X, X.lm.tail), b = rel(X, X.lm.tailTip); return Math.atan2(b[1] - a[1], (b[0] - a[0]) * sign); };
-    B.tail0.rot += w * wrap(ang(O, facing) - ang(S, 1)) / D2R * mS;
+    B.tail0.rot += wr * wrap(ang(O, facing) - ang(S, 1)) / D2R * mS;
   }
 }
 // 渐变时这条腿的爪子应该落在哪（S 的姿势坐标）：自己的爪子位置和 O 的之间插 w
@@ -430,7 +509,7 @@ function facePatch(R, set, M, x, y, w, h, texture, alpha) {
   return [x0,y0,x1,y1];
 }
 function deform(m, mats, yaw, MG, foreshorten) {
-  const r = m.rest, pos = m.pos, wts = m.wts, nb = mats.length, vu = m.vUsed;
+  const r = m.rest, pos = m.pos, wts = m.wts, nb = mats.length;
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (let i = 0, k = 0; i < r.length; i += 2, k++) {
     const x = r[i], y = r[i + 1], w = wts[k];
@@ -443,9 +522,27 @@ function deform(m, mats, yaw, MG, foreshorten) {
       X += MG[0] * dx + MG[2] * dy; Y += MG[1] * dx + MG[3] * dy;
     }
     pos[i] = X; pos[i + 1] = Y;
-    if (vu[k]) { if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y; }
+    if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y;
   }
   return [x0, y0, x1, y1];
+}
+function drawHead(R, set, kit, MH, face, parts, texture) {
+  if (texture) parts.head = facePatch(R, set, MH, 0, 0, set.headW, set.headH, texture, 1);
+  if (!kit || !face) return;
+  // 新的零件先画满，旧的盖在上面慢慢淡出，切换时不会露出底下没有眼睛的头
+  if (set.faceKit) for (const [group, cur, prev, f] of [[kit.eyes, face.eye, face.eyeP, face.eyeF], [kit.mouths, face.carry && kit.mouths.hold ? 'hold' : face.mouth, face.mouthP, face.mouthF]]) {
+    const a = group[cur]; if (a) facePatch(R, set, MH, a.x, a.y, a.w, a.h, a.tex, 1);
+    const b = prev && prev !== cur ? group[prev] : null;
+    if (b && f < 1) facePatch(R, set, MH, b.x, b.y, b.w, b.h, b.tex, 1 - f);
+  }
+  if (face.carry && kit.note && kit.noteCfg && set.facePoints && set.facePoints.mouthHold) {
+    const nc = kit.noteCfg, n = kit.note, s = nc.width / n.w, mh = set.facePoints.mouthHold;
+    const biteWeight = set.muzzleWarp ? muzzleWeight(set,...mh) : 0;
+    const mx = mh[0] + (set.muzzleWarp?.[0] || 0)*biteWeight, my = mh[1] + (set.muzzleWarp?.[1] || 0)*biteWeight;
+    const MN = mul(MH, mul(mul(Tm(mx + (nc.dx || 0), my + (nc.dy || 0)), Rm(nc.rotation || 0)), mul(Sm(s, s), Tm(-nc.grip[0], -nc.grip[1]))));
+    parts.note = quadLocal(R, MN, 0, 0, n.w, n.h, n.tex, 1);
+    if (set.faceKit && kit.lipTex) facePatch(R, set, MH, 0, 0, kit.w, kit.h, kit.lipTex, 1);
+  }
 }
 function drawSet(R, set, kit, MG, face, parts, yaw = 0) {
   if (!qm) qm = R.quad();
@@ -464,25 +561,10 @@ function drawSet(R, set, kit, MG, face, parts, yaw = 0) {
       const shift = 2 * (set.ax - set.lm.eye[0]) * yaw;
       MH = [MH[0],MH[1],MH[2],MH[3],MH[4] + MG[0] * shift,MH[5] + MG[1] * shift];
     }
-    if (ly.tex) parts.head = facePatch(R, set, MH, 0, 0, set.headW, set.headH, ly.tex, 1);
-    if (!kit || !face) continue;
-    // 新的零件先画满，旧的盖在上面慢慢淡出，切换时不会露出底下没有眼睛的头
-    if (set.faceKit) for (const [group, cur, prev, f] of [[kit.eyes, face.eye, face.eyeP, face.eyeF], [kit.mouths, face.carry && kit.mouths.hold ? 'hold' : face.mouth, face.mouthP, face.mouthF]]) {
-      const a = group[cur]; if (a) facePatch(R, set, MH, a.x, a.y, a.w, a.h, a.tex, 1);
-      const b = prev && prev !== cur ? group[prev] : null;
-      if (b && f < 1) facePatch(R, set, MH, b.x, b.y, b.w, b.h, b.tex, 1 - f);
-    }
-    if (face.carry && kit.note && kit.noteCfg && set.facePoints && set.facePoints.mouthHold) {
-      const nc = kit.noteCfg, n = kit.note, s = nc.width / n.w, mh = set.facePoints.mouthHold;
-      const biteWeight = set.muzzleWarp ? muzzleWeight(set,...mh) : 0;
-      const mx = mh[0] + (set.muzzleWarp?.[0] || 0)*biteWeight, my = mh[1] + (set.muzzleWarp?.[1] || 0)*biteWeight;
-      const MN = mul(MH, mul(mul(Tm(mx + (nc.dx || 0), my + (nc.dy || 0)), Rm(nc.rotation || 0)), mul(Sm(s, s), Tm(-nc.grip[0], -nc.grip[1]))));
-      parts.note = quadLocal(R, MN, 0, 0, n.w, n.h, n.tex, 1);
-      if (set.faceKit && kit.lipTex) facePatch(R, set, MH, 0, 0, kit.w, kit.h, kit.lipTex, 1);
-    }
+    drawHead(R, set, kit, MH, face, parts, ly.tex);
   }
   return mats;
 }
 
-root.PetRig = { createRenderer, loadImage, buildKit, buildSet, setAnchor, morphToward, footToward, snapshot, restore, rel, fromRel, reset, solve, ik, drawSet, quadLocal, mul, ap, Tm, Rm, Sm, wrap, localM };
+root.PetRig = { createRenderer, loadImage, buildKit, buildSet, setAnchor, morphToward, footToward, snapshot, restore, rel, fromRel, reset, solve, ik, drawSet, drawHead, quadLocal, mul, ap, Tm, Rm, Sm, wrap, localM };
 })(typeof self !== 'undefined' ? self : this);
