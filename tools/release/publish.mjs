@@ -43,11 +43,18 @@ try {
 }
 
 // ---------- 代码得先推上去：标签要指向 GitHub 上有的那次提交 ----------
+// 在 GitHub 云端打包（.github/workflows/release.yml）时代码就是从 GitHub 拉的，提交号用 GitHub 给的；
+// 是推版本标签触发的，标签得和 package.json 的版本号对上
+const inCI = process.env.GITHUB_ACTIONS === 'true';
 if (git('status', '--porcelain')) fail('还有没提交的改动，先提交并推上去');
-const head = git('rev-parse', 'HEAD');
-const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
-const remoteHead = (git('ls-remote', 'origin', `refs/heads/${branch}`).split(/\s/)[0]) || '';
-if (remoteHead !== head) fail(`本地的 ${branch} 还没推到 GitHub（本地 ${head.slice(0, 7)}，GitHub ${remoteHead.slice(0, 7) || '没有'}），先 git push`);
+const head = inCI ? process.env.GITHUB_SHA : git('rev-parse', 'HEAD');
+if (inCI) {
+  if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== tag) fail(`推的标签是 ${process.env.GITHUB_REF_NAME}，package.json 的版本是 ${version}：两个要一样`);
+} else {
+  const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
+  const remoteHead = (git('ls-remote', 'origin', `refs/heads/${branch}`).split(/\s/)[0]) || '';
+  if (remoteHead !== head) fail(`本地的 ${branch} 还没推到 GitHub（本地 ${head.slice(0, 7)}，GitHub ${remoteHead.slice(0, 7) || '没有'}），先 git push`);
+}
 
 // ---------- 校验文件 ----------
 const sums = files.map(f => `${createHash('sha256').update(readFileSync(f)).digest('hex')}  ${path.basename(f)}`).join('\n') + '\n';

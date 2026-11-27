@@ -160,17 +160,17 @@ npm run dev
 
 安装版和从源码跑的用同一个存档目录、同一把单实例锁：两个不会同时开出两只狗。换成安装版之前，先从托盘退出源码跑的那只。
 
-### 合养要自己搭一个 Supabase
+### 联网配置
 
-仓库里不带联网配置，不配的话程序照常能用，只是没有"一起养"。要用的话：
+仓库里的 `config/supabase.json` 就是一起养连的那个 Supabase 项目（地址和公开密钥），从源码跑也能直接和用下载版的朋友一起养，什么都不用配。公开密钥本来就是给客户端用的，装好的程序里本来也带着；数据安全靠服务器上的行级权限规则（RLS）和服务器函数里的校验，不靠藏密钥。Secret / service_role 密钥绝不能放进来，程序发现了会拒绝联网。
+
+想连自己搭的项目（比如改了数据库要先试）：
 
 1. 在 [Supabase](https://supabase.com) 建一个项目，在 Authentication 里打开匿名登录（Anonymous sign-ins）
 2. 在 SQL Editor 里按文件名顺序跑一遍 `supabase/migrations/` 下的 SQL
-3. 把 `config/supabase.example.json` 复制成 `config/supabase.json`，填上项目地址和公开密钥（Publishable key）。这个文件不进 git，打包时会带进安装包
+3. 把 `config/supabase.example.json` 复制成 `config/supabase.local.json`，填上那个项目的地址和公开密钥。它比 `supabase.json` 优先，只留在本机，不进 git，也不会打进安装包
 
-只填公开密钥。Secret / service_role 密钥绝不能放进客户端。
-
-自己搭的是另一套独立的服务，进不了用下载版的朋友的组。想和他们一起养，要连同一个 Supabase 项目：向维护这个仓库的人要一份 `config/supabase.json`。
+自己搭的是另一套独立的服务，和用下载版的朋友不在一起。
 
 ## 打包和发布
 
@@ -182,14 +182,21 @@ npm run dist:dir    # 只打成文件夹 dist/win-unpacked，自己试跑用
 
 打包工具是 electron-builder，配置在 `package.json` 的 `build` 里。包里只放程序自己的代码、打包好的美术（`rig-data.js`，1 MB）、图标、手写字体和联网配置 `config/supabase.json`。高清原图（`hd-library`）、本机配置（`*.local.json`）、文档、测试都不进包。`config/supabase.json` 不在或填得不对时 `npm run dist` 直接停下，免得打出一个连不上的安装包。第一次打包要从 GitHub 下 NSIS 等几样小工具，之后用本机缓存。
 
-发新版本：
+发新版本（在 GitHub 的服务器上打包，本机不用传大文件）：
 
 1. 改 `package.json` 的 `version`（x.y.z，新版本提醒按它比大小），在 `docs/release-notes/<版本>.md` 写这版改了什么
-2. `npm test`、`npm run smoke` 过一遍，再 `npm run dist`
+2. `npm test`、`npm run smoke` 过一遍
 3. 提交，`git push`
-4. `npm run release`：在 GitHub 建 `v<版本>` 的 Release，传安装包、压缩包和 `SHA256SUMS.txt`，全传完才公开。GitHub 登录用 `GH_TOKEN` 环境变量，没有就用 `git push` 时的那个登录（不打印、不写盘）。中途断了再跑一次会接着传。只想检查不上传：`npm run release -- --dry-run`
+4. 打版本标签并推上去，标签就是 `v` 加版本号：
 
-装好的版本最晚 12 小时后就会提醒朋友有新版本。
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+GitHub 收到标签后，在它的 Windows 机器上跑单元测试、打安装包和压缩包，传到 Releases，全传完才公开（`.github/workflows/release.yml`，大约十几分钟，进度在仓库的 Actions 页面看）。标签和 `package.json` 的版本对不上会直接停下。装好的版本最晚 12 小时后就会提醒朋友有新版本。
+
+也可以在本机打包、本机上传：`npm run dist` 再 `npm run release`（GitHub 登录用 `GH_TOKEN` 环境变量，没有就用 `git push` 时的那个登录，不打印、不写盘；中途断了再跑一次会接着传；只检查不上传加 `-- --dry-run`）。有的公司网络会拦往外传程序文件，那就用上面的标签方式。
 
 ## 测试
 
@@ -266,7 +273,8 @@ src/renderer/   pet.js 行为和每帧姿势；rig.js 分层素材的骨骼网�
                 note / together / watch / diary 四个小窗口；fonts/ 手写字体
 src/shared/     visit.js 串门规则（主进程和测试共用）
 supabase/       合养的数据库表、权限规则和服务器函数
-config/         联网配置的样例（真配置 supabase.json 只在本机）
+config/         联网配置 supabase.json（一起养连的 Supabase 地址和公开密钥）；连别的项目用的样例
+.github/        推版本标签时在 GitHub 上打包发布的流程
 assets/         beagle/puppy/rig-data.js 是打包好给页面用的美术数据（parts.js 是早期低清版，已不用）；icons/ 托盘图标
 test/           单元测试
 tools/          build_hd.py 打包美术；bench.ps1 测 CPU；e2e/ 真桌面测试；docs/ 生成 README 配图；

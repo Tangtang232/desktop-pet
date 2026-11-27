@@ -12,7 +12,7 @@ const fail = msg => { console.error(`[preflight] ${msg}`); process.exit(1); };
 
 let cfg = null;
 try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (err) {
-  fail(`没找到能读的 config/supabase.json（${err.code || err.message}）。照 config/supabase.example.json 建一份再打包，不然安装包里没有合养。`);
+  fail(`没找到能读的 config/supabase.json（${err.code || err.message}）。它在仓库里，用 git checkout config/supabase.json 恢复再打包，不然安装包里没有合养。`);
 }
 const why = [];
 if (!checkConfig(cfg, m => why.push(m))) fail(`config/supabase.json 不能用：${why[0] || '地址要是 https://<项目>.supabase.co，密钥要填公开密钥（Publishable key）'}`);

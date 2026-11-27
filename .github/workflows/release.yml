@@ -1,0 +1,42 @@
+# 发新版本：推一个版本标签（比如 git tag v0.2.0 && git push origin v0.2.0），GitHub 的 Windows 机器就会
+# 从这次提交打安装包和压缩包，发到 Releases。标签要和 package.json 的 version 一样（前面加 v）。
+# 也可以在 Actions 页面手动点 Run workflow，发 package.json 里那个版本。
+name: 发布
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 建 Release、传文件
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 装依赖
+        run: npm ci
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 打安装包和压缩包
+        run: npm run dist
+
+      - name: 发到 Releases
+        run: node tools/release/publish.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,7 +13,7 @@
 | `src/renderer/pet.js` 里"合养"一节 | 只管动画：叼起纸条走出屏幕、从屏幕边走进来、不在这儿时隐身 |
 | `src/renderer/together.html/js` | "一起养"窗口（托盘、右键菜单"一起养…"）：邀请、输邀请码、同意、叫它回来、起名 |
 | `src/renderer/note.*` | 写纸条窗口（手写体、写给谁） |
-| `config/supabase.json` | Supabase 地址和公开密钥，打包时带进安装包（公开密钥本来就是给客户端用的，安全靠 RLS）。不进 git（2026-11-27 起），照 `supabase.example.json` 在本机建一份。开发时想连别的项目，放一个 `supabase.local.json`（也不进 git）覆盖 |
+| `config/supabase.json` | Supabase 地址和公开密钥，进仓库、打包时带进安装包（公开密钥本来就是给客户端用的，安全靠 RLS 和服务器函数）。开发时想连别的项目，照 `supabase.example.json` 放一个 `supabase.local.json`（不进 git、不进安装包）覆盖 |
 | `supabase/migrations/20261126b_optional_nickname.sql` | 名字改选填、`set_nickname` 改名函数。已跑过 |
 
 ## 身份和数据

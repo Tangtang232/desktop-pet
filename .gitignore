@@ -11,7 +11,6 @@ Thumbs.db
 # GPT 出的高清原图只留在本机，程序用的是 tools/build_hd.py 打包出来的 rig-data.js
 assets/beagle/hd-library/
 
-# 联网配置（Supabase 地址和公开密钥）只留在本机：打包时会带进安装包，但不进仓库。
-# 照 config/supabase.example.json 自己建一份 config/supabase.json
-config/supabase.json
+# 联网配置 config/supabase.json 进仓库（只有公开密钥，2026-11-27 起）：从源码跑、GitHub 云端打包都直接用它。
+# 开发时临时连别的项目用 config/supabase.local.json，只留在本机
 config/*.local.json

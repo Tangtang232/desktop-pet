@@ -1,0 +1,5 @@
+{
+  "_说明": "合养联网用的 Supabase 连接信息，随程序发布。publishableKey 是公开密钥，本来就是给客户端用的，安全靠服务器上的权限规则（RLS）。Secret / service_role 密钥绝不能放进来。",
+  "url": "https://ldltttayjwrbqsjqfowu.supabase.co",
+  "publishableKey": "sb_publishable_X0sWX49jcFDGuA0AbH1cEw_U0eOL7gB"
+}
