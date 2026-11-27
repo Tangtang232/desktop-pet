@@ -73,6 +73,9 @@ try {
   check('A 建组拿到邀请码', created.ok, { ok: created.ok, error: created.error });
   let code = created.code;
   const createdAt = Date.now();
+  // 两个人才算一起养：只有 A 时只是发出了邀请
+  const vA0 = await view('A');
+  check('A 发出邀请：还没开始一起养（等朋友加入）', vA0.alone === true && vA0.started === false, { alone: vA0.alone, started: vA0.started });
   // 1a) 组里只有 A 一个人时，拿到邀请码的人想冒认 A：A 的电脑最近还在，所以得 A 点"是我"，不能凭邀请码直接生效
   const aMe0 = (await dbg('A')).me;
   const pkS = await M.C(`${T}.peek(${JSON.stringify(code)})`);
@@ -90,6 +93,10 @@ try {
   const pA = await until(async () => { const v = await view('A'); return v.pending.length ? v : null; }, 30000);
   await M.A(`${T}.approve(${JSON.stringify(pA.pending[0].id)}, true)`);
   check('A 同意后 B 进组', !!(await until(async () => (await view('B')).mode === 'ready', 20000)));
+  const started = await until(async () => { await M.A(`${T}.refresh()`); const v = await view('A'); return v.alone === false && v.started === true ? v : null; }, 20000, 1000);
+  check('凑够两个人：开始一起养了', !!started);
+  const sAt = await M.A(`${T}._pet() && ${T}._pet().started_at`);
+  check('服务器记下了开始一起养的时间', !!sAt, sAt);
   const vB0 = await view('B');
   check('B 那边看到的邀请码就是 A 的码（服务器上加密存了一份）', vB0.code === code, { same: vB0.code === code });
   const jC = await M.C(`${T}.joinPet(${JSON.stringify(code)}, '')`);
@@ -237,6 +244,8 @@ try {
   check('B 退出', lb.ok && lb.status === 'left', lb);
   check('B 那边回到单机', (await view('B')).mode === 'none');
   check('B 的桌面上狗回来了（单机的那只）', !!(await until(async () => (await page('B', 'R.dog.abroad')) === false, 15000)));
+  const back = await until(async () => { await M.A2(`${T}.refresh()`); const v = await view('A2'); return v.alone ? v : null; }, 20000, 1000);
+  check('只剩 A 了：回到等朋友加入（组不散，算一起养过）', !!back && back.started === true, back && { alone: back.alone, started: back.started });
   const la = await M.A2(`${T}.leave()`);
   check('A 也退出：组散了（服务器上这个组的数据都删了）', la.ok && la.status === 'gone', la);
   check('A 的另一台电脑也跟着不在组里了', !!(await until(async () => { await M.A(`${T}.refresh()`); return (await view('A')).mode === 'none'; }, 40000, 2000)));

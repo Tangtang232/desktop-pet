@@ -365,7 +365,7 @@ function startTogether() {
 function togetherMenu() {
   if (!together || !together.enabled) return [];
   const v = together.view();
-  const items = [{ label: v.pending && v.pending.length ? `一起养…（${v.pending.length} 人等你同意）` : '一起养…', click: openTogetherWindow }];
+  const items = [{ label: v.pending && v.pending.length ? `一起养…（${v.pending.length} 人等你同意）` : v.alone ? '一起养…（等朋友加入）' : '一起养…', click: openTogetherWindow }];
   if (v.mode === 'ready' && v.onMyOther) {
     items.push({ label: '叫它过来（它在你另一台电脑上）', click: async () => {
       const r = await together.callPet();
@@ -559,7 +559,7 @@ function copyDiagnostics() {
   const lines = [`桌面比格 ${app.getVersion()}（${app.isPackaged ? '安装版' : '源码'}）· Electron ${process.versions.electron} · Windows ${os.release()} · 运行了 ${Math.round(process.uptime() / 60)} 分钟`];
   const ds = screen.getAllDisplays();
   lines.push(`屏幕 ${ds.length} 块：${ds.map(d => `${d.size.width}x${d.size.height}@${d.scaleFactor}`).join('，')}`);
-  if (together) { const v = together.view(); lines.push(`一起养：${v.mode}${v.error ? `（${v.error}）` : ''}`); }
+  if (together) { const v = together.view(); lines.push(`一起养：${v.mode}${v.alone ? '（等朋友加入）' : ''}${v.error ? `（${v.error}）` : ''}`); }
   if (saveLocked) lines.push('存档：更新版本写的，这个版本只读');
   let log = ''; try { log = fs.readFileSync(dataFile('diag.log'), 'utf8'); } catch {}
   const tail = log.trim() ? log.trim().split('\n').slice(-30).map(l => l.slice(0, 600)) : ['（没有）'];

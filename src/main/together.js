@@ -150,6 +150,9 @@ function create(opts) {
   const hostLabel = () => (!pet || !pet.host ? '' : withMe() ? '你的另一台电脑' : nameOf(pet.host));
   const activeMembers = () => members.filter(m => m.status === 'active');
   const deviceRow = uid => devices.find(d => d.user_id === uid && d.member_id === memberId) || null;
+  // 两个人才算一起养：组里只有自己时只是发出了邀请（等朋友加入），狗还是自己的，不上传状态、不串门
+  // 邀请不过期：一直有效，直到点"不邀请了"或者有人加入
+  const alone = () => phase === 'ready' && activeMembers().length < 2;
 
   // ---------- 给界面看的状态 ----------
   function view(forWindow) {
@@ -176,6 +179,9 @@ function create(opts) {
         voted: kicks.some(k => k.target === id && k.voter === memberId && k.ok)
       })),
       canKick: act.length >= 3,
+      // 还没人加入（只有自己）：等朋友加入。started：凑够过两个人（一起养过，后来只剩自己）
+      alone: alone(),
+      started: !!(pet && (pet.started_at || act.length >= 2)),
       kept: !!(pet && pet.call && pet.call.by === memberId && pet.call.kept && t < pet.call.until),
       canFeed: phase === 'ready' && !!pet && !withMe() && !(pet.feed && t - pet.feed.at < 10 * 60 * 1000)
     };
@@ -317,6 +323,11 @@ function create(opts) {
     }
     phase = 'ready'; pendingKind = null; lastFullRefresh = now();
     for (const k of myDeviceVotes) if (!devices.some(d => d.status === 'pending' && `${d.user_id}:${d.member_id}` === k)) myDeviceVotes.delete(k);
+    // 凑够两个人、开始一起养了：发起邀请的那个人日记里记一笔（加入的那边在审批通过时记"加入了一起养"）
+    if (activeMembers().length >= 2 && vault.get('startedFor') !== petId) {
+      vault.set('startedFor', petId);
+      if (vault.get('createdFor') === petId) diary('开始和朋友一起养它');
+    }
     publish();
     onPetChanged();
     registerRecovery();
@@ -333,7 +344,7 @@ function create(opts) {
     } catch (err) { log('重新认领没成功:', err.message); return null; }
   }
   function forget() {
-    for (const k of ['petId', 'memberId', 'code', 'groupKey', 'nickname', 'lastHere', 'feedAt', 'recoveryFor']) vault.set(k, null);
+    for (const k of ['petId', 'memberId', 'code', 'groupKey', 'nickname', 'lastHere', 'feedAt', 'recoveryFor', 'createdFor', 'startedFor']) vault.set(k, null);
     petId = memberId = code = null; groupKey = null; pet = null; members = []; notes = []; devices = []; kicks = []; phase = 'none'; pendingKind = null;
     departing = null; asking = null; stopSnapshots();
     if (channel) { sb.removeChannel(channel); channel = null; }
@@ -540,7 +551,7 @@ function create(opts) {
       // 狗在这儿：定时把它的肚子、心情传上去（这台突然关机时，接走它的人能接着养；别人也能看到它在干嘛）
       // "在干嘛"变了也传（最多半分钟一次），别人碗上、"一起养"里看到的不会差太多
       const actChanged = latestState && latestState.act && latestState.act !== lastActUploaded && now() - stateUploadedAt > 30 * 1000;
-      if (isHere() && latestState && (now() - stateUploadedAt > STATE_UPLOAD_MS || actChanged)) {
+      if (isHere() && latestState && !alone() && (now() - stateUploadedAt > STATE_UPLOAD_MS || actChanged)) {
         stateUploadedAt = now(); lastActUploaded = latestState.act;
         await rpc('save_state', { p_pet: petId, p_state: compactState(latestState) });
       }
@@ -628,10 +639,10 @@ function create(opts) {
       const r = await rpc('create_pet', { p_code: c, p_key_wrap: NC.wrapKey(key, V.normCode(c)), p_nickname: nick });
       petId = r.pet_id; memberId = r.member_id; code = c; groupKey = key;
       vault.set('petId', petId); vault.set('memberId', memberId); vault.set('code', code); vault.set('groupKey', key.toString('hex')); vault.set('nickname', nick);
+      vault.set('createdFor', petId);
       await rpc('set_code_box', { p_pet: petId, p_box: NC.seal(key, c, 'code:' + petId) }).catch(() => {});
       await refresh(); subscribe();
-      diary('开始和朋友一起养它');
-      if (latestState) { stateUploadedAt = now(); rpc('save_state', { p_pet: petId, p_state: compactState(latestState) }).catch(() => {}); }
+      // 这时只是发出了邀请：日记、上传狗的状态都等朋友加入、开始一起养以后再说
       return { ok: true, code: c };
     } catch (err) { return { ok: false, error: errText(errCode(err)) }; }
   }
@@ -773,6 +784,7 @@ function create(opts) {
     startAbroad: () => vault.get('lastHere') === '0',
     // 测试用：立刻跑一次串门判断、报一次平安、看连接状态
     _brain: brain, _beat: beat,
+    _pet: () => pet,
     _debug: () => ({ phase, rtStatus, channel: channel && channel.state, members: members.length, notes: notes.length, host: pet && pet.host, hostDevice: pet && pet.host_device, me: memberId, uid: myUid, devices: devices.length, kicks: kicks.length })
   };
 }

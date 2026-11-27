@@ -1,5 +1,6 @@
 // "一起养"窗口：越简单越好。
 // 没一起养时：邀请朋友一起养 / 输入邀请码，两个按钮。输了码以后：第一次来点"加入"；以前就在组里、换了电脑的，从名单里认自己。
+// 点了"邀请"、组里还只有自己时：只是发出了邀请（邀请码、谁想加入、不邀请了），凑够两个人才开始一起养。
 // 一起养以后：它在谁那儿（不在就能叫它回来、看看它）、要你点头的事（新人加入、新电脑认领、请人离开）、谁在电脑前、邀请码。
 // 名字选填，点"你"起名。不常用的（换邀请码、退出、请人离开）收在小字链接里，点了还要再确认一次。
 const main = document.getElementById('main');
@@ -95,11 +96,35 @@ function renderAsks() {
 // 不常用的操作点了以后先问一句
 function renderConfirm() {
   const c = confirm;
-  const text = { leave: '退出以后它就不来你这儿了，确定？', rotate: '换个新的邀请码？旧的马上作废，已经在组里的人不受影响', kick: `请 ${c.name} 离开？其他人都同意了才算` }[c.kind];
+  // 只有自己时"退出"就是收回邀请（没一起养过）或者把组散掉（一起养过、只剩自己）
+  const leaveText = v.alone ? (v.started ? '退出以后这个组就散了，确定？' : '不邀请了？邀请码马上作废') : '退出以后它就不来你这儿了，确定？';
+  const text = { leave: leaveText, rotate: '换个新的邀请码？旧的马上作废，已经在组里的人不受影响', kick: `请 ${c.name} 离开？其他人都同意了才算` }[c.kind];
   const go = { leave: () => api.leave(), rotate: () => api.rotate(), kick: () => api.kick(c.id, true) }[c.kind];
   main.append(say(text, 18), row(
-    btn({ leave: '退出', rotate: '换', kick: '提议' }[c.kind], 'go small', () => act(async () => { const r = await go(); confirm = null; return r; })),
+    btn({ leave: v.alone && !v.started ? '不邀请了' : '退出', rotate: '换', kick: '提议' }[c.kind], 'go small', () => act(async () => { const r = await go(); confirm = null; return r; })),
     btn('算了', 'ghost small', () => { confirm = null; render(); })), errLine());
+}
+
+// 邀请码一行（组里还没满 4 个人时显示）
+function codeLine() {
+  const count = (v.members || []).filter(x => x.status === 'active' || x.status === 'pending').length;
+  if (count >= 4) return null;
+  // 请人离开以后旧码作废了、新码还没换上（比如刚才那台没连上网）：给个按钮换一个
+  if (!v.code) return el('div', { class: 'code-line' }, '邀请码作废了', btn('换一个', 'ghost small', () => act(api.rotate)));
+  return el('div', { class: 'code-line' }, '邀请码', el('b', null, v.code),
+    el('button', { type: 'button', class: 'ghost small', onclick: () => { api.copy(v.code); copied = true; render(); setTimeout(() => { copied = false; render(); }, 1500); } }, copied ? '复制好了' : '复制'));
+}
+
+// 组里还只有自己：只是发出了邀请，等朋友加入。凑够两个人才开始一起养
+function renderWaiting() {
+  main.append(say(v.started ? '现在只剩你了' : '还没开始一起养', 21),
+    el('div', { class: 'big', style: 'font-size:16px;color:var(--ink-soft)' },
+      v.started ? '把邀请码发给朋友，TA 加入以后接着一起养' : '把邀请码发给朋友，TA 输入以后你点同意，就开始一起养'));
+  renderAsks();
+  main.append(errLine());
+  const cl = codeLine(); if (cl) main.append(cl);
+  main.append(el('div', { class: 'row2', style: 'justify-content:flex-end;gap:14px;padding-right:26px' },
+    el('button', { type: 'button', class: 'link', onclick: () => { confirm = { kind: 'leave' }; render(); } }, v.started ? '退出这个组' : '不邀请了')));
 }
 
 function render() {
@@ -113,6 +138,7 @@ function render() {
     return;
   }
   if (confirm) { renderConfirm(); return; }
+  if (v.alone) { renderWaiting(); return; }
 
   // 一起养着：它在哪
   const host = v.traveling ? '它在路上……' : v.here ? '它在你这儿' : v.onMyOther ? '它在你另一台电脑上' : `它在 ${v.host ? v.host.nickname : 'TA'} 那儿`;
@@ -153,15 +179,7 @@ function render() {
   main.append(errLine());
 
   // 邀请码（组里还没满 4 个人时显示）；最下面一行：换个邀请码、退出
-  const count = (v.members || []).filter(x => x.status === 'active' || x.status === 'pending').length;
-  if (!v.code && count < 4) {
-    // 请人离开以后旧码作废了、新码还没换上（比如刚才那台没连上网）：给个按钮换一个
-    main.append(el('div', { class: 'code-line' }, '邀请码作废了', btn('换一个', 'ghost small', () => act(api.rotate))));
-  }
-  if (v.code && count < 4) {
-    main.append(el('div', { class: 'code-line' }, '邀请码', el('b', null, v.code),
-      el('button', { type: 'button', class: 'ghost small', onclick: () => { api.copy(v.code); copied = true; render(); setTimeout(() => { copied = false; render(); }, 1500); } }, copied ? '复制好了' : '复制')));
-  }
+  const cl = codeLine(); if (cl) main.append(cl);
   main.append(el('div', { class: 'row2', style: 'justify-content:flex-end;gap:14px;padding-right:26px' },   // 右下角留给信纸上的小爪印
     el('button', { type: 'button', class: 'link', onclick: () => { confirm = { kind: 'rotate' }; render(); } }, '换个邀请码'),
     el('button', { type: 'button', class: 'link', onclick: () => { confirm = { kind: 'leave' }; render(); } }, '退出这个组')));
