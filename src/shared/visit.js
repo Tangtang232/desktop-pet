@@ -160,7 +160,9 @@
     for (const ch of s) if (!CODE_ABC.includes(ch)) return null;
     return s;
   }
-  const cleanNickname = n => (typeof n === 'string' ? Array.from(n.replace(/[\u0000-\u001F\u007F@＠]/g, '').trim()).slice(0, 12).join('') : '');
+  // 名字：去掉控制字符、@（纸条里 @名字 选收件人），还有看不见的零宽、左右反转字符（不然能起一个看着和别人一模一样的名字）
+  const cleanNickname = n => (typeof n === 'string'
+    ? Array.from(n.replace(/[\u0000-\u001F\u007F­​-‏‪-‮⁠-⁤⁦-⁩﻿@＠]/g, '').trim()).slice(0, 12).join('') : '');
 
   return {
     PRESENT_MS, STALE_HOST_MS, MIN_STAY_MS, AWAY_LEAVE_MS, CALL_COOLDOWN_MS, TRAVEL_MS,

@@ -10,7 +10,8 @@ function render() {
   if (f.here) { where.textContent = '它回到你这儿了'; hint('去桌面上看它吧'); feed.hidden = call.hidden = true; return; }
   if (f.onMyOther) { where.textContent = '它在你另一台电脑上'; hint('那台闲下来，它会自己过来'); feed.hidden = call.hidden = true; return; }
   feed.hidden = call.hidden = false;
-  if (f.traveling) { where.textContent = '它在路上……'; hint('一会儿就到'); }
+  if (f.paused) { where.textContent = `它在 ${f.hostName || 'TA'} 那儿`; hint('看了好一会儿了，先停一停。点这里接着看'); }
+  else if (f.traveling) { where.textContent = '它在路上……'; hint('一会儿就到'); }
   else {
     where.textContent = `它在 ${f.hostName || 'TA'} 那儿` + (f.doing ? `，${f.doing}` : '') + (f.kept ? '。TA 想再和它玩一会儿' : '');
     if (f.img) {
@@ -35,5 +36,6 @@ async function act(fn, okText) {
 feed.addEventListener('click', () => act(api.feed, '喂好了，它那边的碗满了'));
 call.addEventListener('click', () => act(api.call, '叫了，它马上就来'));
 $('close').addEventListener('click', () => api.close());
+view.addEventListener('click', () => { if (f && f.paused) api.resume(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') api.close(); });
 api.onFrame(nf => { f = nf; render(); });

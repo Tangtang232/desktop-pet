@@ -36,7 +36,15 @@ node tools/e2e/bowl-real.mjs 5
 
 ## 出问题时看什么
 
-`%APPDATA%\desktop-pet\diag.log`：页面发现输入异常时写一行（同一种一分钟最多一行），带最近 20 条输入记录。`dom-down-missing` 表示页面自己没收到按下、靠主进程那一路接住了；`press-miss` 表示主进程报了按下，但位置不在狗身上。
+`%APPDATA%\desktop-pet\diag.log`：页面发现输入异常时写一行（同一种一分钟最多一行），带最近 20 条输入记录。`dom-down-missing` 表示页面自己没收到按下、靠主进程那一路接住了；`press-miss` 表示主进程报了按下，但位置不在狗身上。还会记：`main-error` / `main-rejection`（主进程意外的错）、`renderer-gone` / `renderer-unresponsive`（页面崩了、卡死）、`frame-error`（某一帧出错，一分钟最多记一次）、`gl-lost`（显卡上下文丢了）、`state-restored` / `state-lost` / `state-newer`（存档用了备份、坏了没备份、是新版本写的）。朋友那边出问题时，让他点托盘 →「关于」→「复制诊断信息」发过来，里面有最近 30 行。
+
+## 存档保护：`save-real.mjs`
+
+```
+node tools/e2e/save-real.mjs
+```
+
+开一个看不见、不联网的测试副本，约 1 分钟：页面脚本跑起来、还没读到存档时连着重载两次，存档里的纸条还在；更新版本写的存档原样留着；写坏的存档用 `.bak` 接着养、坏的改名留底。7 项都要过。拿旧版本的目录跑（`PET_ROOT=<目录>`）能看到旧版本在这里丢存档。
 
 ## 合养（两个人）
 

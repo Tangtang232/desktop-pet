@@ -8,6 +8,7 @@ const logic = require('../renderer/logic.js');
 const deskLayer = require('./desktop-layer.js');
 const Together = require('./together.js');
 const UpdateCheck = require('./update-check.js');
+const SafeFile = require('./safe-file.js');
 const pkg = require('../../package.json');
 
 const isDev = process.argv.includes('--dev');
@@ -38,6 +39,11 @@ let updater = null;
 let tray = null;
 let hidden = false;
 let latestState = null;
+let secondCopy = false;
+// 存档保护：页面读到存档之前送来的存档不收（开机慢时页面可能先被重载，那时它手里是一只还没读档的默认小狗）；
+// 存档是更新版本写的（旧版本读不懂）时只读不写，免得把新存档覆盖掉
+let pageHasState = false;
+let saveLocked = false;
 
 // 冒烟测试用临时目录，不碰真实存档，也不和正在运行的那只狗抢单实例锁
 if (isSmoke || bench) app.setPath('userData', path.join(os.tmpdir(), `desktop-pet-${isSmoke ? 'smoke' : 'bench'}-${Date.now()}`));
@@ -45,22 +51,25 @@ else {
   // 存档目录固定在 %APPDATA%\desktop-pet：装好的版本（程序名是"桌面比格"）和从源码跑的版本用同一份，
   // 换成安装版后狗还是那只、合养也还在；两边共用一把单实例锁，不会同时开出两只。测试副本照旧用它自己指定的目录
   if (!isTestCopy) app.setPath('userData', path.join(app.getPath('appData'), 'desktop-pet'));
-  if (!app.requestSingleInstanceLock()) app.quit();
+  // 已经有一只在跑：这一份什么都不做直接退出（whenReady 里也不再建窗口、不连服务器）
+  if (!app.requestSingleInstanceLock()) { secondCopy = true; app.quit(); }
 }
 // 装好的版本：系统通知、任务栏分组认这个身份（和安装包里的 appId 一致）
 if (app.isPackaged) app.setAppUserModelId(APP_ID);
 
-// ---------- 存档：先写临时文件再改名，写到一半断电也不会把存档写坏 ----------
+// ---------- 存档：先写临时文件、强制落盘再改名，写到一半断电也不会把存档写坏 ----------
+// 狗的存档和日记换掉旧文件前，每小时留一份 .bak；读不了时用 .bak（见 safe-file.js）
 const dataFile = name => path.join(app.getPath('userData'), name);
+const BACKUP_EVERY = { 'pet-state.json': 3600 * 1000, 'diary.json': 3600 * 1000 };
 function readJson(name, fallback) {
-  try { return JSON.parse(fs.readFileSync(dataFile(name), 'utf8')); } catch { return fallback; }
+  const r = SafeFile.readJson(dataFile(name));
+  return r.ok ? r.value : fallback;
 }
 function writeJson(name, value) {
-  const file = dataFile(name), tmp = `${file}.tmp`;
+  const file = dataFile(name);
   try {
-    fs.mkdirSync(app.getPath('userData'), { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
-    fs.renameSync(tmp, file);
+    if (BACKUP_EVERY[name]) SafeFile.backupBeforeWrite(file, BACKUP_EVERY[name]);
+    SafeFile.writeAtomic(file, JSON.stringify(value, null, 2));
   } catch (err) {
     console.error(`[main] 写入 ${name} 失败:`, err);
   }
@@ -163,33 +172,54 @@ function createWindow() {
       console.log(`[renderer] ${ev.message} (${path.basename(String(ev.sourceId || ''))}:${ev.lineNumber})`);
     });
   }
+  // 页面每次（重新）开始加载：还没读到存档、还没报过平安，看门狗按"刚开机"宽限
+  win.webContents.on('did-start-loading', () => { pageHasState = false; firstBeat = false; lastBeat = Date.now(); });
   win.webContents.on('render-process-gone', (_e, details) => {
     console.error('[main] 渲染进程退出:', details.reason);
+    writeDiag({ kind: 'renderer-gone', detail: String(details.reason) });
     recover('渲染进程退出');
   });
-  win.on('unresponsive', () => recover('页面无响应'));
+  // 页面卡死：reload 叫不醒卡死的页面，先把渲染进程结束掉，render-process-gone 里再重载
+  win.on('unresponsive', () => {
+    if (!win || isSmoke) return;
+    win.setIgnoreMouseEvents(true);
+    writeDiag({ kind: 'renderer-unresponsive' });
+    try { win.webContents.forcefullyCrashRenderer(); } catch { recover('页面无响应'); }
+  });
   win.on('closed', () => { win = null; });
 }
 
 // ---------- 看门狗：页面每秒报一次平安；几秒没消息就先恢复点穿，再重载页面 ----------
+// 页面刚加载、还没报过第一次平安时（开机时电脑忙、素材在解码），给 60 秒宽限，不急着重载
 let lastBeat = Date.now();
-let lastRecover = 0;
+let firstBeat = false;
+let lastRecover = 0, reloadTimer = null;
 function recover(reason) {
   if (!win || isSmoke) return;
   win.setIgnoreMouseEvents(true);
-  if (Date.now() - lastRecover < 30000) return;
-  lastRecover = Date.now();
-  console.error(`[main] ${reason}，恢复点穿并重载页面`);
-  lastBeat = Date.now();
-  win.webContents.reload();
+  if (reloadTimer) return;
+  // 30 秒内最多重载一次；太近了就排到 30 秒后，不是不管（渲染进程连着崩时也能再起来）
+  const wait = Math.max(0, lastRecover + 30000 - Date.now());
+  reloadTimer = setTimeout(() => {
+    reloadTimer = null;
+    if (!win) return;
+    lastRecover = Date.now();
+    console.error(`[main] ${reason}，恢复点穿并重载页面`);
+    lastBeat = Date.now();
+    win.webContents.reload();
+  }, wait);
 }
 function startWatchdog() {
   setInterval(() => {
     if (!win || hidden || isSmoke) return;
     const silent = Date.now() - lastBeat;
     if (silent > 4000) win.setIgnoreMouseEvents(true);
-    if (silent > 9000) recover('页面 9 秒没有心跳');
+    if (firstBeat ? silent > 9000 : silent > 60000) recover(firstBeat ? '页面 9 秒没有心跳' : '页面 60 秒没加载好');
   }, 1000);
+  // 电脑睡醒、解锁：睡着的那段时间页面当然没报平安，不算卡死
+  const fresh = () => { lastBeat = Date.now(); };
+  powerMonitor.on('resume', fresh);
+  powerMonitor.on('unlock-screen', fresh);
 }
 
 // ---------- 人在不在电脑前：每 5 秒告诉页面键鼠空闲了多少秒 ----------
@@ -386,9 +416,19 @@ ipcMain.on('together:event', (_e, kind) => { if (together) together.heartEvent(k
 
 // ---------- 日记：它这辈子的大事（本机记，最多 500 条；托盘"它的日记"里看） ----------
 let diaryWin = null;
+// 读日记：文件坏了就用备份（坏的那份改名留底）；不是数组的是更新版本的格式，不碰（返回 null）
+function readDiary() {
+  const file = dataFile('diary.json'), r = SafeFile.readJson(file);
+  if (!r.exists) return [];
+  if (r.ok) return Array.isArray(r.value) ? r.value : null;
+  const b = SafeFile.readJson(`${file}.bak`);
+  SafeFile.setAside(file);
+  writeDiag({ kind: 'diary-unreadable', detail: b.ok ? 'restored from backup' : 'no backup' });
+  return b.ok && Array.isArray(b.value) ? b.value : [];
+}
 function addDiary(text, at) {
   if (isSmoke || bench || typeof text !== 'string' || !text.trim()) return;
-  const list = readJson('diary.json', []), t = at || Date.now(), clean = Array.from(text.trim()).slice(0, 80).join('');
+  const list = readDiary(), t = at || Date.now(), clean = Array.from(text.trim()).slice(0, 80).join('');
   if (!Array.isArray(list)) return;
   if (list.some(e => e && e.text === clean && t - e.at < 10 * 60 * 1000)) return;   // 十分钟内同一句不重复记
   list.push({ at: t, text: clean });
@@ -397,7 +437,7 @@ function addDiary(text, at) {
   if (diaryWin && !diaryWin.isDestroyed()) diaryWin.webContents.send('diary:list', keep);
 }
 ipcMain.on('pet:diary', (_e, text) => addDiary(String(text)));
-ipcMain.handle('diary:list', () => { const l = readJson('diary.json', []); return Array.isArray(l) ? l.slice(-500) : []; });
+ipcMain.handle('diary:list', () => { const l = readDiary(); return Array.isArray(l) ? l.slice(-500) : []; });
 ipcMain.on('diary:close', () => { if (diaryWin) diaryWin.close(); });
 function openDiaryWindow() {
   if (diaryWin) { bringBack(diaryWin); return; }
@@ -440,26 +480,38 @@ function openWatchWindow() {
   politePopup(watchWin);
   // 小图多久没变了：狗那边的电脑睡着、关机时，不再显示一张旧图
   let lastAt = null, sameSince = Date.now(), stopped = false;
+  // 开着窗口却 10 分钟没理它（没点过、没切到它上面）：暂停，不再让对面每 4 秒传图；点一下窗口接着看
+  const LOOK_MS = 10 * 60 * 1000;
+  let lastLook = Date.now(), paused = false;
   const push = async () => {
     if (stopped || !watchWin || watchWin.isDestroyed()) return;
     const v = together.view();
     let snap = null;
-    if (!v.here && !v.onMyOther && !v.traveling) { try { snap = await together.latestSnapshot(); } catch {} }
+    if (!paused && !v.here && !v.onMyOther && !v.traveling) { try { snap = await together.latestSnapshot(); } catch {} }
     if (snap && snap.at !== lastAt) { lastAt = snap.at; sameSince = Date.now(); }
     const fresh = snap && Date.now() - sameSince < 20000;
     if (!watchWin || watchWin.isDestroyed()) return;
     watchWin.webContents.send('watch:frame', {
       hostName: v.host ? v.host.nickname : '', here: v.here, onMyOther: v.onMyOther, traveling: v.traveling,
-      doing: (fresh && snap.doing) || v.doing || '', img: fresh ? snap.img : null, waiting: !snap,
+      doing: (fresh && snap.doing) || v.doing || '', img: fresh ? snap.img : null, waiting: !snap, paused,
       canFeed: v.canFeed, canCall: !!v.canCall, callWhy: v.callWhy || null, kept: v.kept
     });
   };
+  const resume = () => { lastLook = Date.now(); if (!paused) return; paused = false; together.watch(true); push(); };
   together.watch(true);
-  const renew = setInterval(() => together.watch(true), 60000);
-  const poll = setInterval(push, 3000);
+  const renew = setInterval(() => {
+    if (paused) return;
+    if (Date.now() - lastLook > LOOK_MS && !(watchWin && watchWin.isFocused())) { paused = true; together.watch(false); push(); }
+    else together.watch(true);
+  }, 60000);
+  const poll = setInterval(() => { if (!paused) push(); }, 3000);
+  watchWin.on('focus', resume);
   watchWin.webContents.on('did-finish-load', () => { push(); setTimeout(push, 1500); });
-  watchWin.on('closed', () => { stopped = true; clearInterval(renew); clearInterval(poll); together.watch(false); watchWin = null; });
+  watchWin.on('closed', () => { stopped = true; clearInterval(renew); clearInterval(poll); together.watch(false); watchWin = null; watchResume = () => {}; });
+  watchResume = resume;
 }
+let watchResume = () => {};
+ipcMain.on('watch:resume', () => watchResume());
 ipcMain.handle('together:feed', () => together ? together.remoteFeed() : { ok: false });
 ipcMain.on('together:openWatch', () => openWatchWindow());
 ipcMain.on('watch:close', () => { if (watchWin) watchWin.close(); });
@@ -489,13 +541,32 @@ function buildMenu() {
       label: '开机自动启动', type: 'checkbox', checked: app.getLoginItemSettings(loginOpts()).openAtLogin,
       click: item => app.setLoginItemSettings({ openAtLogin: item.checked, ...loginOpts() })
     },
-    ...(updater ? [{ label: `关于（版本 ${app.getVersion()}）`, submenu: [
-      { label: '打开项目主页', click: () => shell.openExternal(updater.page) },
-      { label: '检查新版本', click: () => updater.check(true) }
-    ] }] : []),
+    { label: `关于（版本 ${app.getVersion()}）`, submenu: [
+      ...(updater ? [
+        { label: '打开项目主页', click: () => shell.openExternal(updater.page) },
+        { label: '检查新版本', click: () => updater.check(true) }
+      ] : []),
+      { label: '复制诊断信息（出问题时发给开发者）', click: copyDiagnostics }
+    ] },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
   ]);
+}
+// 朋友那边出了问题：点一下把版本、系统、屏幕、一起养的状态和最近的诊断记录复制到剪贴板，粘贴发过来就行。
+// 不带邀请码、纸条、名字；路径里的用户名换成 ~
+function copyDiagnostics() {
+  const home = os.homedir();
+  const lines = [`桌面比格 ${app.getVersion()}（${app.isPackaged ? '安装版' : '源码'}）· Electron ${process.versions.electron} · Windows ${os.release()} · 运行了 ${Math.round(process.uptime() / 60)} 分钟`];
+  const ds = screen.getAllDisplays();
+  lines.push(`屏幕 ${ds.length} 块：${ds.map(d => `${d.size.width}x${d.size.height}@${d.scaleFactor}`).join('，')}`);
+  if (together) { const v = together.view(); lines.push(`一起养：${v.mode}${v.error ? `（${v.error}）` : ''}`); }
+  if (saveLocked) lines.push('存档：更新版本写的，这个版本只读');
+  let log = ''; try { log = fs.readFileSync(dataFile('diag.log'), 'utf8'); } catch {}
+  const tail = log.trim() ? log.trim().split('\n').slice(-30).map(l => l.slice(0, 600)) : ['（没有）'];
+  lines.push('最近的诊断记录：', ...tail);
+  // 诊断记录是 JSON，里面的路径反斜杠是转义过的（C:\\Users\\名字），两种写法都换掉
+  clipboard.writeText(lines.join('\n').split(home).join('~').split(home.replace(/\\/g, '\\\\')).join('~'));
+  balloon('诊断信息复制好了，粘贴发给开发者就行（里面没有邀请码和纸条）');
 }
 function balloon(text) {
   if (tray && process.platform === 'win32') tray.displayBalloon({ title: '桌面比格', content: String(text).slice(0, 120), noSound: true });
@@ -589,15 +660,16 @@ function watchButtonRelease(on) {
 ipcMain.on('pet:menu', () => {
   if (win) buildMenu().popup({ window: win });
 });
-ipcMain.on('pet:heartbeat', () => { lastBeat = Date.now(); });
+ipcMain.on('pet:heartbeat', () => { lastBeat = Date.now(); firstBeat = true; });
 // 狗要去旁边那块屏幕（dir：-1 左边，1 右边）：自己走出屏幕边、或者被你拖过了边
 ipcMain.handle('pet:cross', (_e, dir) => {
   if (isSmoke) return { ok: true };
   const n = neighbors(), id = dir < 0 ? n.left : n.right;
   return { ok: id != null && moveToDisplay(id) };
 });
-// 诊断记录：页面发现输入异常（比如主进程看到按下了、页面自己没收到）时写一行，出问题时有据可查
-ipcMain.on('pet:diag', (_e, entry) => {
+// 诊断记录：页面发现输入异常（比如主进程看到按下了、页面自己没收到）、主进程出了意外的错时写一行，出问题时有据可查。
+// 托盘「关于 → 复制诊断信息」会带上最近几十行
+function writeDiag(entry) {
   if (isSmoke || bench) return;
   try {
     const file = dataFile('diag.log');
@@ -605,15 +677,42 @@ ipcMain.on('pet:diag', (_e, entry) => {
     const line = JSON.stringify({ at: new Date().toISOString(), ...(entry && typeof entry === 'object' ? entry : { msg: String(entry) }) }).slice(0, 4000) + '\n';
     if (size > 256 * 1024) fs.writeFileSync(file, line); else fs.appendFileSync(file, line);
   } catch (err) { /* 写不了日志不影响狗 */ }
-});
+}
+ipcMain.on('pet:diag', (_e, entry) => writeDiag(entry));
 ipcMain.on('pet:tooltip', (_e, text) => { if (tray && typeof text === 'string') tray.setToolTip(text.slice(0, 60)); });
+// 读狗的存档：坏了用备份；是更新版本写的就只读不写；第一次装好时打个招呼
+let stateChecked = false;
+function loadPetState() {
+  const r = SafeFile.readImportant(dataFile('pet-state.json'), logic.sanitizeState, 1);
+  if (!stateChecked && !isSmoke && !bench) {
+    stateChecked = true;
+    if (r.newer) {
+      saveLocked = true;
+      writeDiag({ kind: 'state-newer' });
+      setTimeout(() => balloon('存档是更新的版本存的，这个版本读不懂。先不存档，装回新版本狗就回来了'), 3000);
+    } else if (r.from === 'backup') {
+      writeDiag({ kind: 'state-restored' });
+      setTimeout(() => balloon('存档坏了，用一小时内的备份接着养（最近一会儿的变化可能没了）'), 3000);
+    } else if (r.broken) {
+      writeDiag({ kind: 'state-lost' });
+      setTimeout(() => balloon('存档坏了也没有备份，只好重新开始。坏的那份留在存档目录里了'), 3000);
+    } else if (!r.existed && !settings.welcomed && !isTestCopy) {
+      settings.welcomed = true; writeJson('settings.json', settings);
+      setTimeout(() => balloon('我住在桌面最底下。右键点我（或者托盘里的这个图标）能喂饭、写纸条、和朋友一起养'), 4000);
+    }
+  }
+  return r.value;
+}
 ipcMain.handle('pet:load', () => {
   // 页面（重新）加载时窗口回到底部一条
   if (win && !isSmoke && expanded) { expanded = false; watchButtonRelease(false); win.setBounds(windowBounds()); win.setAlwaysOnTop(false); sinkWindow(); }
   // 展开纸条时页面重载了（崩溃、卡死被看门狗重载）：纸条已经没了，窗口也要放回桌面层，不然会一直顶在最上面
   if (win && !isSmoke && raised) { raised = false; win.setAlwaysOnTop(false); sinkWindow(); }
+  // 页面重载时手里已经有最近的存档（内存里的比盘上的新），就给它
+  const state = latestState || loadPetState();
+  pageHasState = true;
   return {
-  state: logic.sanitizeState(readJson('pet-state.json', null)),
+  state,
   settings, now: Date.now(), dev: isDev, smoke: isSmoke, bench, frame: frameInfo(),
     e2e: !!process.env.PET_E2E,
     abroad: together ? together.startAbroad() : false,   // 合养：上次关程序时它在别人那儿   // 真桌面验收测试：页面暴露 window.__rig 供测试脚本读状态，行为和平时一样
@@ -621,6 +720,8 @@ ipcMain.handle('pet:load', () => {
   };
 });
 ipcMain.on('pet:save', (_e, state) => {
+  // 页面还没拿到存档（开机慢时页面先被重载）送来的是一只默认小狗；存档是新版本的：都不写
+  if (!pageHasState || saveLocked) return;
   const clean = logic.sanitizeState(state);
   if (!clean || isSmoke || bench) return;
   latestState = clean;
@@ -641,7 +742,17 @@ ipcMain.on('smoke:done', (_e, result) => {
 });
 
 // ---------- 生命周期 ----------
+// 主进程出了没接住的错：记进诊断记录，不弹 Electron 自带的报错框（那个框会抢焦点、挡住你正在用的程序）
+process.on('uncaughtException', err => { console.error('[main] 意外的错误:', err); writeDiag({ kind: 'main-error', detail: String(err && err.stack || err).slice(0, 1500) }); });
+process.on('unhandledRejection', err => { console.error('[main] 没接住的异步错误:', err); writeDiag({ kind: 'main-rejection', detail: String(err && err.stack || err).slice(0, 1500) }); });
+// 所有窗口都只显示程序自己的页面：拖进来的文件、链接不会把窗口换掉，页面里也开不出新窗口
+app.on('web-contents-created', (_e, wc) => {
+  // 重新加载自己（显卡恢复后页面自己 reload）放行，换成别的地址一律不行
+  wc.on('will-navigate', (e, url) => { if (url !== wc.getURL()) e.preventDefault(); });
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+});
 app.whenReady().then(() => {
+  if (secondCopy) return;
   createWindow();
   if (isSmoke) {
     setTimeout(() => { console.error('[smoke] 超时'); app.exit(2); }, 120000);
@@ -664,6 +775,6 @@ app.whenReady().then(() => {
   screen.on('display-removed', fitToWorkArea);
 });
 app.on('second-instance', () => { if (hidden) toggleHidden(); });
-app.on('before-quit', () => { if (latestState && !isSmoke) writeJson('pet-state.json', latestState); });
+app.on('before-quit', () => { if (latestState && !isSmoke && !saveLocked) writeJson('pet-state.json', latestState); });
 app.on('will-quit', () => { if (together) together.stop(); if (updater) updater.stop(); });
 app.on('window-all-closed', () => app.quit());

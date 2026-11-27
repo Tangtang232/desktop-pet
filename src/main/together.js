@@ -13,6 +13,9 @@ const NC = require('./notes-crypto.js');
 const CONFIG_DIR = path.join(__dirname, '..', '..', 'config');
 const CONFIG_FILES = [process.env.PET_SUPABASE_CONFIG, path.join(CONFIG_DIR, 'supabase.local.json'), path.join(CONFIG_DIR, 'supabase.json')].filter(Boolean);
 const HEARTBEAT_MS = 30 * 1000, BRAIN_MS = 60 * 1000, STATE_UPLOAD_MS = 2 * 60 * 1000, HEART_UPLOAD_MS = 2 * 60 * 1000;
+const FULL_REFRESH_MS = 3 * 60 * 1000;   // 推送接着时多久整套重拉一次兜底
+const PENDING_POLL_MS = 10 * 1000;       // 等审批时多久问一次（推送漏了也不用等到下一次心跳）
+const CLAIM_RETRY_MS = 6 * 3600 * 1000;  // 认领在等：隔多久再问一次（那个人原来的电脑 7 天没动静了，就凭邀请码生效）
 const AWAY_SEC = 300;
 
 // 读连接配置。只接受公开密钥：误填了管理员密钥（Secret / service_role）直接拒绝，免得把它带进客户端
@@ -129,6 +132,10 @@ function create(opts) {
   let lastPlayAt = 0, asking = null, lastCallAt = null;     // 留它一次：最近一次和它玩、正在问你要不要留它
   const askedCalls = new Set();
   let handledFeedAt = 0, snapTimer = null, watched = false, lastActUploaded = null;
+  let lastFullRefresh = 0, lastClaimTry = 0;
+  // 登录丢了（服务器作废了凭据、匿名用户被清掉）重新登录成了一个新身份：组里不认识它，要凭本机的认领钥匙认回自己
+  let identityChanged = false;
+  const myDeviceVotes = new Set();   // 我点过"同意"、还在等其他人的新电脑（user:member）
   const timers = [];
 
   const now = () => Date.now();
@@ -161,7 +168,8 @@ function create(opts) {
       pending: members.filter(m => m.status === 'pending' && m.id !== memberId).map(m => ({ id: m.id, nickname: m.nickname || '' })),
       // 新电脑说自己是组里的某某，等人确认
       claims: devices.filter(d => d.status === 'pending' && act.some(m => m.id === d.member_id))
-        .map(d => ({ user: d.user_id, member: d.member_id, name: d.member_id === memberId ? '你' : nameOf(d.member_id), mine: d.member_id === memberId })),
+        .map(d => ({ user: d.user_id, member: d.member_id, name: d.member_id === memberId ? '你' : nameOf(d.member_id), mine: d.member_id === memberId,
+          voted: myDeviceVotes.has(`${d.user_id}:${d.member_id}`) })),
       // 请人离开的投票（被请的人看不到）
       kicks: [...new Set(kicks.map(k => k.target))].filter(id => id !== memberId && act.some(m => m.id === id)).map(id => ({
         target: id, name: nameOf(id), yes: kicks.filter(k => k.target === id && k.ok).length, need: act.length - 1,
@@ -188,19 +196,39 @@ function create(opts) {
 
   // ---------- 连接 ----------
   async function connect() {
-    const { createClient } = require('@supabase/supabase-js');
-    const storage = { getItem: k => vault.get('auth:' + k), setItem: (k, v) => vault.set('auth:' + k, v), removeItem: k => vault.set('auth:' + k, null) };
-    sb = createClient(cfg.url, cfg.key, {
-      auth: { storage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-      realtime: { params: { eventsPerSecond: 5 } }
-    });
+    // 只建一个客户端：断网时每分钟重连一次，以前每次都新建一个、旧的不关，每个都带着自己的定时刷新登录
+    if (!sb) {
+      const { createClient } = require('@supabase/supabase-js');
+      const storage = { getItem: k => vault.get('auth:' + k), setItem: (k, v) => vault.set('auth:' + k, v), removeItem: k => vault.set('auth:' + k, null) };
+      sb = createClient(cfg.url, cfg.key, {
+        auth: { storage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+        realtime: { params: { eventsPerSecond: 5 } }
+      });
+    }
     let { data } = await sb.auth.getSession();
     if (!data.session) {
       const r = await sb.auth.signInAnonymously();
       if (r.error) throw r.error;
       data = { session: r.data.session };
+      if (petId) identityChanged = true;
     }
     myUid = data.session && data.session.user ? data.session.user.id : null;
+    const prev = vault.get('uid');
+    if (prev && myUid && prev !== myUid && petId) identityChanged = true;
+    if (myUid && prev !== myUid) vault.set('uid', myUid);
+  }
+  // 认领钥匙：每台电脑一把，只在本机（系统加密），服务器只存哈希。进组以后交一次哈希；登录丢了凭它认回自己
+  function recoverySecret() {
+    let s = vault.get('recovery');
+    if (!s) { s = crypto.randomBytes(24).toString('base64url'); vault.set('recovery', s); }
+    return s;
+  }
+  function registerRecovery() {
+    if (!petId || vault.get('recoveryFor') === petId) return;
+    const pid = petId;
+    rpc('set_recovery', { p_pet: pid, p_secret: recoverySecret() })
+      .then(() => { if (petId === pid) vault.set('recoveryFor', pid); })
+      .catch(e => log('认领钥匙没交上（服务器可能还是旧版）:', e.message));
   }
   async function rpc(fn, args) {
     const { data, error } = await sb.rpc(fn, args);
@@ -231,11 +259,15 @@ function create(opts) {
       timers.push(setTimeout(start, 60 * 1000));
       return;
     }
-    if (!timers.length || phase !== 'offline') {
+    if (!loopsStarted) {
+      loopsStarted = true;
       timers.push(setInterval(beat, HEARTBEAT_MS), setInterval(brain, BRAIN_MS));
+      // 等审批时每 10 秒问一次：推送偶尔会漏，不用干等到下一次心跳
+      timers.push(setInterval(() => { if (sb && petId && phase === 'pending') refresh().catch(() => {}); }, PENDING_POLL_MS));
       beat();
     }
   }
+  let loopsStarted = false;
 
   // 从服务器把这个组的东西读一遍
   async function refresh() {
@@ -243,10 +275,20 @@ function create(opts) {
     const p = await sb.from('pets').select('*').eq('id', petId).maybeSingle();
     if (p.error) throw p.error;
     if (!p.data) {
+      // 登录换了个新身份：组里不认识这台了。先凭认领钥匙（和邀请码）认回自己，别急着当成被请出了组、把本机记着的都清掉
+      if (identityChanged && code && memberId) {
+        identityChanged = false; lastClaimTry = now();
+        const r = await reclaimSelf();
+        if (r) { notify(r === 'active' ? '这台电脑的登录换了，已经认回来了' : '这台电脑的登录换了，已经重新申请，等你另一台电脑或者组里的人确认'); return refresh(); }
+      }
       // 读不到宠物：还在等审批（新人等同意、新电脑等确认），或者被拒了、作废了、被请离开了、组散了
       const d = myUid ? await sb.from('devices').select('status').eq('user_id', myUid).eq('member_id', memberId).maybeSingle() : { data: null };
       const m = await sb.from('members').select('*').eq('id', memberId).maybeSingle();
-      if (d.data && d.data.status === 'pending') { phase = 'pending'; pendingKind = 'claim'; members = m.data ? [m.data] : []; publish(); return; }
+      if (d.data && d.data.status === 'pending') {
+        // 认领在等：隔几个小时再问一次（被认领的人原来的电脑 7 天没动静了，服务器就让它直接生效）
+        if (code && now() - lastClaimTry > CLAIM_RETRY_MS) { lastClaimTry = now(); if ((await reclaimSelf()) === 'active') return refresh(); }
+        phase = 'pending'; pendingKind = 'claim'; members = m.data ? [m.data] : []; publish(); return;
+      }
       if (m.data && m.data.status === 'pending') { phase = 'pending'; pendingKind = 'join'; members = [m.data]; publish(); return; }
       const why = d.data && d.data.status === 'rejected' ? 'device_rejected' : m.data && GONE_TEXT[m.data.status] ? m.data.status : 'gone';
       log('这台电脑已经不在那个组里了:', why);
@@ -273,12 +315,25 @@ function create(opts) {
     } else if (groupKey && code && !pet.code_box) {
       rpc('set_code_box', { p_pet: petId, p_box: NC.seal(groupKey, code, 'code:' + petId) }).catch(() => {});
     }
-    phase = 'ready'; pendingKind = null;
+    phase = 'ready'; pendingKind = null; lastFullRefresh = now();
+    for (const k of myDeviceVotes) if (!devices.some(d => d.status === 'pending' && `${d.user_id}:${d.member_id}` === k)) myDeviceVotes.delete(k);
     publish();
     onPetChanged();
+    registerRecovery();
+  }
+  // 凭认领钥匙和邀请码认回自己（这台电脑登录丢了、或者认领在等）：返回 'active' / 'pending'，不成就 null
+  async function reclaimSelf() {
+    const args = { p_code: V.normCode(code), p_member: memberId };
+    try {
+      let r;
+      try { r = await rpc('claim_member', { ...args, p_secret: recoverySecret() }); }
+      catch (err) { if (/p_secret|function/i.test(String(err.message))) r = await rpc('claim_member', args); else throw err; }   // 服务器还是旧版
+      log('重新认领自己:', r.status);
+      return r.status === 'active' || r.status === 'pending' ? r.status : null;
+    } catch (err) { log('重新认领没成功:', err.message); return null; }
   }
   function forget() {
-    for (const k of ['petId', 'memberId', 'code', 'groupKey', 'nickname', 'lastHere', 'feedAt']) vault.set(k, null);
+    for (const k of ['petId', 'memberId', 'code', 'groupKey', 'nickname', 'lastHere', 'feedAt', 'recoveryFor']) vault.set(k, null);
     petId = memberId = code = null; groupKey = null; pet = null; members = []; notes = []; devices = []; kicks = []; phase = 'none'; pendingKind = null;
     departing = null; asking = null; stopSnapshots();
     if (channel) { sb.removeChannel(channel); channel = null; }
@@ -326,12 +381,18 @@ function create(opts) {
           if (ev.eventType === 'INSERT') brainSoon();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, ev => {
-          if (ev.new && ev.new.status === 'pending' && members.some(m => m.id === ev.new.member_id)) {
-            notify(ev.new.member_id === memberId ? '有台新电脑说它是你，打开"一起养"确认一下' : `有台新电脑说它是 ${nameOf(ev.new.member_id)}，打开"一起养"确认一下`);
+          const n = ev.new;
+          // 只是心跳（状态没变，只是"最近在不在"变了）：就地更新，不整套重拉。组里每个人每 30 秒一次心跳，以前每次都让每个人重拉一遍
+          const d = n && n.user_id ? devices.find(x => x.user_id === n.user_id && x.member_id === n.member_id) : null;
+          if (d && d.status === n.status) {
+            Object.assign(d, { seen_at: n.seen_at, active_at: n.active_at, seenAt: ms(n.seen_at), activeAt: ms(n.active_at) });
+            publish(); return;
+          }
+          if (n && n.status === 'pending' && members.some(m => m.id === n.member_id)) {
+            notify(n.member_id === memberId ? '有台新电脑说它是你，打开"一起养"确认一下' : `有台新电脑说它是 ${nameOf(n.member_id)}，打开"一起养"确认一下`);
           }
           refreshSoon();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'kick_votes' }, () => refreshSoon());
+        });
     }
     // 订阅生效时先补拉一次：订阅建立之前发生的变化（比如刚建组时就有人来加入）推送收不到
     channel.subscribe((status, err) => {
@@ -484,7 +545,9 @@ function create(opts) {
         await rpc('save_state', { p_pet: petId, p_state: compactState(latestState) });
       }
       if (heartDirty && now() - heartUploadedAt > HEART_UPLOAD_MS) uploadHeart();
-      if (phase === 'pending' || phase === 'ready') await refresh();
+      // 实时推送接着时，变化会推过来，整套重拉只每 3 分钟兜一次底（推送偶尔会漏）；推送没接上时每次心跳都拉。
+      // 以前每次心跳都整套拉一遍，组里每个人的心跳又会推到每个人那儿再各拉一遍，4 个人时每 30 秒约 20 次
+      if (phase === 'pending' || (phase === 'ready' && (rtStatus !== 'SUBSCRIBED' || now() - lastFullRefresh > FULL_REFRESH_MS))) await refresh();
     } catch (err) {
       const c = errCode(err);
       if (c === 'offline' && phase === 'ready') { phase = 'offline'; lastError = c; publish(); }
@@ -593,12 +656,18 @@ function create(opts) {
     const c = V.normCode(input);
     if (!c) return { ok: false, error: errText('bad_code_format') };
     if (!sb) return { ok: false, error: errText('not_signed_in') };
+    lastClaimTry = now();   // 刚认领过，过几个小时再自动重试
     try { return await adopt(await rpc('claim_member', { p_code: c, p_member: member }), c, null); }
     catch (err) { return { ok: false, error: errText(errCode(err)) }; }
   }
+  // 同意 / 不同意一台新电脑。本人点"是我"马上生效；别人点同意要等组里其他人也同意（返回 'pending'）
   async function approveDevice(user, member, ok) {
-    try { const r = await rpc('approve_device', { p_user: user, p_member: member, p_ok: !!ok }); await refresh(); return { ok: true, status: r }; }
-    catch (err) { return { ok: false, error: errText(errCode(err)) }; }
+    try {
+      const r = await rpc('approve_device', { p_user: user, p_member: member, p_ok: !!ok });
+      if (r === 'pending') myDeviceVotes.add(`${user}:${member}`); else myDeviceVotes.delete(`${user}:${member}`);
+      await refresh();
+      return { ok: true, status: r };
+    } catch (err) { return { ok: false, error: errText(errCode(err)) }; }
   }
   // 给自己起名字（选填，随时能改；留空就是"TA"）
   async function rename(nickname) {
@@ -683,9 +752,15 @@ function create(opts) {
     get ready() { return phase === 'ready'; },
     start, stop, view,
     // "一起养"窗口开着时每 5 秒拉一次：刚建好组、推送还没接通的那几秒里有人来申请，也能很快看到
+    // 开着超过 2 分钟（多半是忘了关、被别的窗口盖着）就改成 30 秒一次
     onWindowView(fn) {
       listeners.add(fn);
-      const t = setInterval(() => { if (sb && petId && (phase === 'ready' || phase === 'pending')) refresh().catch(() => {}); }, 5000);
+      const opened = now(); let ticks = 0;
+      const t = setInterval(() => {
+        ticks++;
+        if (now() - opened > 120000 && ticks % 6) return;
+        if (sb && petId && (phase === 'ready' || phase === 'pending')) refresh().catch(() => {});
+      }, 5000);
       return () => { listeners.delete(fn); clearInterval(t); };
     },
     createPet, joinPet, peek, claim, approve, approveDevice, rename, callPet, rotateCode, leave, voteKick,

@@ -5,5 +5,7 @@ contextBridge.exposeInMainWorld('watchApi', {
   onFrame: cb => ipcRenderer.on('watch:frame', (_e, f) => cb(f)),
   feed: () => ipcRenderer.invoke('together:feed'),
   call: () => ipcRenderer.invoke('together:call'),
-  close: () => ipcRenderer.send('watch:close')
+  close: () => ipcRenderer.send('watch:close'),
+  // 开着太久没理它会暂停传图；点一下接着看
+  resume: () => ipcRenderer.send('watch:resume')
 });

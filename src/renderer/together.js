@@ -78,6 +78,8 @@ function renderAsks() {
       btn('不同意', 'ghost small', () => act(() => api.approve(p.id, false)))));
   }
   for (const c of v.claims || []) {
+    // 别人的新电脑：要组里除了 TA 以外的人都同意（或者 TA 自己在别的电脑上点"是我"）
+    if (c.voted) { main.append(row(say(`有台新电脑说自己是 ${c.name}：你同意了，等其他人`, 16))); continue; }
     main.append(row(say(c.mine ? '有台新电脑说它是你' : `有台新电脑说自己是 ${c.name}`, 18),
       btn(c.mine ? '是我' : '同意', 'go small', () => act(() => api.approveDevice(c.user, c.member, true))),
       btn(c.mine ? '不是' : '不同意', 'ghost small', () => act(() => api.approveDevice(c.user, c.member, false)))));
@@ -106,7 +108,10 @@ function render() {
   if (m === 'off' || m === 'starting') { main.append(el('div', { class: 'big' }, '正在连接……')); return; }
   if (m === 'offline') { main.append(el('div', { class: 'big' }, '连不上'), el('div', { class: 'err' }, '等网络好了它会自己连上')); return; }
   if (m === 'none') { renderNone(); return; }
-  if (m === 'pending') { main.append(el('div', { class: 'big' }, v.pendingKind === 'claim' ? '等组里有人确认是你……' : '等 TA 同意……'), errLine()); return; }
+  if (m === 'pending') {
+    main.append(el('div', { class: 'big' }, v.pendingKind === 'claim' ? '等你原来那台电脑点"是我"，或者组里其他人都同意……' : '等 TA 同意……'), errLine());
+    return;
+  }
   if (confirm) { renderConfirm(); return; }
 
   // 一起养着：它在哪

@@ -20,7 +20,13 @@ const { mul, ap, Tm, Rm, Sm } = RIG || {};
 // ---------- WebGL ----------
 const stage = document.getElementById('stage'), cv = document.getElementById('gl'), ov = document.getElementById('ov'), octx = ov.getContext('2d');
 const R = RIG && RIG.createRenderer(cv);
-if (!R || !HD){ stage.insertAdjacentHTML('beforeend', `<p class="err">${R ? '素材数据没加载到，先运行 python tools/build_hd.py。' : '这台电脑没开 WebGL，看不了动画。'}</p>`); return; }
+// 显示不出来（没有 WebGL、素材坏了）：托盘提示一次，照常报平安（不然看门狗会一遍遍重载），窗口保持点穿，不挡桌面
+function cantShow(text, kind, err){
+  api.diag({ kind, detail:err ? String(err && err.stack || err).slice(0, 800) : '' });
+  api.notify(text);
+  setInterval(() => api.heartbeat(), 1000);
+}
+if (!R || !HD){ cantShow(R ? '程序文件好像不完整，狗显示不出来。重新安装一下试试' : '这台电脑的显卡用不了 WebGL，狗显示不出来', R ? 'asset-missing' : 'no-webgl'); return; }
 const gl = R.gl, tex = R.tex, quadMesh = R.quad;
 let drawCalls = 0;
 const drawMesh = (m, t, a) => { drawCalls++; R.drawMesh(m, t, a); };
@@ -1663,8 +1669,10 @@ function snapshot(){
   const gn = world.groundNote ? { text:world.groundNote.text, x:world.groundNote.x / Math.max(1, W) } : dog.carry ? { text:dog.carry, x:.5 } : null;
   return { v:1, savedAt:Date.now(), act:actName(), grow:GROW, x:clamp(dog.x, 0, W) / Math.max(1, W), facing:dog.facing, belly:dog.belly, food:world.food, needs:dog.needs, notes:dog.notes, groundNote:gn, bowl:world.bowlN };
 }
-setInterval(() => api.save(snapshot()), 15000);
-window.addEventListener('beforeunload', () => api.save(snapshot()));
+// 读到存档以后才存：开机时素材还在解码、存档还没读进来，这时存下去的是一只默认小狗，会把真存档盖掉
+let booted = false;
+setInterval(() => { if (booted) api.save(snapshot()); }, 15000);
+window.addEventListener('beforeunload', () => { if (booted) api.save(snapshot()); });
 
 // ---------- 冒烟测试（npm run smoke）：按剧本跑一遍，截图给开发者看，最后报告哪些检查没过 ----------
 async function runSmoke(){
@@ -2098,7 +2106,7 @@ function registerSittingPaws(poses){
     }
   } catch (err){
     console.error('[pet] 素材加载失败', err);
-    stage.insertAdjacentHTML('beforeend', '<p class="err">素材加载失败，重新运行 python tools/build_hd.py 试试。</p>');
+    cantShow('程序文件好像不完整，狗显示不出来。重新安装一下试试', 'asset-failed', err);
     return;
   }
   // 坐下时前爪留在原地：坐姿的落脚点按前爪对齐站姿；转身仍然绕站姿的身体中心
@@ -2135,6 +2143,7 @@ function registerSittingPaws(poses){
     // 老存档里还没有养成：生日按存档里最早的时间算（最早的纸条），没有就从现在算
     if (g){ GROW = g; refreshGrow(); } else { GROW.born = Math.min(st0.savedAt || Date.now(), ...dog.notes.map(n => n.at).filter(v => v > 0)); api.diary('开始记日记'); }
   } else if (!boot.smoke) api.diary('第一天来到这里');
+  booted = true;
   if (!boot.smoke) setInterval(growCheck, 60000);
   // 合养：上次关程序时它在别人那儿，先别露面，等连上服务器再说（免得一开机闪一下又走）
   if (boot.abroad && !boot.smoke){ dog.abroad = true; dog.visible = false; }
@@ -2153,7 +2162,18 @@ function registerSittingPaws(poses){
   const targetFps = () => boot.benchFps ? boot.benchFps : document.hidden || occluded || dog.abroad ? 2 : !dog.visible ? 4 : quick() ? 30 : lively() ? 24 : dog.action === 'sleep' ? 5 : 8;
   let last = performance.now(), expandReq = false, frames = 0, renderMs = 0, updateMs = 0, boxSent = '', boxSentAt = 0;
   if (boot.bench) setInterval(() => { console.log(`[bench] ${(frames / 5).toFixed(1)} 帧/秒 每帧 update ${(updateMs / Math.max(1, frames)).toFixed(2)}ms render ${(renderMs / Math.max(1, frames)).toFixed(2)}ms 画 ${drawCalls / Math.max(1, frames) | 0} 次 动作=${dog.action}`); frames = 0; renderMs = 0; updateMs = 0; drawCalls = 0; }, 5000);
+  // 每一帧都包一层：一帧出错只记下来、接着画下一帧，不让整个动画停掉。
+  // 连着出错（8 秒里没有一帧走完）就不再报平安，让主进程的看门狗重载页面
+  let lastFrameOk = performance.now(), frameErrAt = 0;
   const frame = () => {
+    try { frameBody(); lastFrameOk = performance.now(); }
+    catch (err){
+      const t = performance.now();
+      if (t - frameErrAt > 60000){ frameErrAt = t; console.error('[pet] 这一帧出错', err); api.diag({ kind:'frame-error', detail:String(err && err.stack || err).slice(0, 800) }); }
+    }
+    schedule();
+  };
+  const frameBody = () => {
     const now = performance.now();
     if (pendingWant === false && now - lastSwitch >= 120) updateInteractive(ptr.x, ptr.y);
     // 鼠标不动、狗在动：每 0.1 秒按狗的新位置重新判断一次鼠标下面是不是狗。不然狗走到静止的鼠标底下点不着，
@@ -2175,7 +2195,6 @@ function registerSittingPaws(poses){
     if (wantExp !== expandReq){ expandReq = wantExp; if (api.setExpanded) api.setExpanded(wantExp); }
     // occluded 只代表狗被挡住，旁边的碗可能还露着。粮量改变时补画一帧即可。
     if (!document.hidden && (!occluded || kibbleCount(world.food) !== bowlFood) && !boot.benchNoRender){ const r0 = performance.now(); render(); renderMs += performance.now() - r0; frames++ }
-    schedule();
   };
   const schedule = () => {
     const wait = Math.max(0, 1000 / targetFps() - (performance.now() - last) - 6);
@@ -2190,12 +2209,18 @@ function registerSittingPaws(poses){
     dog.needs = PL.tickNeeds(dog.needs, sec, { sleeping, userPresent:nctx.userPresent, night:nctx.night, speed:SPEED, drainMul:EFF.drainMul, attentionMul:EFF.attentionMul });
     PM.tickMind(dog.mind, sec, { ...dog.needs, hunger:PL.hungerStage(dog.belly), night:nctx.night, userPresent:nctx.userPresent, asleep:sleeping && !dog.dozing, posture:sleeping || dog.action === 'lie' ? 'lie' : 'stand', quiet:true, heldFor:-1 });
   }
-  cv.addEventListener('webglcontextlost', e => { e.preventDefault(); diag('contextlost'); console.error('[pet] WebGL 上下文丢失'); }, false);
-  cv.addEventListener('webglcontextrestored', () => { diag('contextrestored'); location.reload(); }, false);
+  // 显卡重置、远程桌面、驱动更新会让 WebGL 上下文丢掉：等它恢复后重载页面；10 秒还没恢复也重载（不然狗一直看不见）
+  let lostTimer = null;
+  cv.addEventListener('webglcontextlost', e => {
+    e.preventDefault(); diag('contextlost'); console.error('[pet] WebGL 上下文丢失'); api.diag({ kind:'gl-lost' });
+    clearTimeout(lostTimer); lostTimer = setTimeout(() => location.reload(), 10000);
+  }, false);
+  cv.addEventListener('webglcontextrestored', () => { clearTimeout(lostTimer); diag('contextrestored'); location.reload(); }, false);
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => diag('resize', `${Math.round(stage.clientWidth)}x${Math.round(stage.clientHeight)}`)).observe(stage);
   setInterval(() => { if (DIAG && Object.keys(diagCount).length){ console.log('[diag] 每分钟统计 ' + JSON.stringify(diagCount)); for (const k in diagCount) delete diagCount[k]; } }, 60000);
   update(1 / 60); render();
-  if (!boot.smoke){ schedule(); setInterval(() => api.heartbeat(), 1000); }
+  // 报平安只在动画真的在走时报：动画停了（连续出错、卡住）看门狗才能发现。最慢一档每秒也有 2 帧，8 秒没走完一帧就是出事了
+  if (!boot.smoke){ schedule(); setInterval(() => { if (performance.now() - lastFrameOk < 8000) api.heartbeat(); }, 1000); }
   if (boot.bench){ handleCommand({ type:'action', value:boot.bench }); dog.manualUntil = 1e12; }
   if (boot.dev) console.log(`[pet] 启动完成 窗口 ${Math.round(W)}x${Math.round(Hh)} dpr=${dpr} 狗高=${Math.round(PH)}px 渲染=${R.gl2 ? 'WebGL2' : 'WebGL1'} 肚子=${dog.belly.toFixed(2)}`);
   if (boot.dev || boot.smoke || boot.e2e) window.__rig = { step:(n, dt) => { for (let i = 0; i < n; i++){ lastDt = dt || 1 / 60; update(dt || 1 / 60); } render(); }, dog, get set(){ return cur; }, get turn(){return pivotTurn;}, get motion(){ return motion; }, get rise(){ return motion?.kind === 'rise' ? motion : null; }, get curl(){ return motion?.kind === 'curl' ? motion : null; }, SETS, KIT, world, ptr, setAction, startOnce, resize, handleCommand, hitTest, openCard, closeCard, get inputRing(){ return inputRing; }, get interactive(){ return interactive; }, bowlRect, showAwayBubble, startCross, enterFrom, get grow(){ return GROW; }, get traits(){ return TRAITS; }, get eff(){ return EFF; }, growEvent, growCheck };

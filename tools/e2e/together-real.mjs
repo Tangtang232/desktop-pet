@@ -1,5 +1,7 @@
 // 合养补完的端到端测试：开四个看不见的测试副本当三个人（A、B、C），A 还有第二台电脑 A2。真连 Supabase。
-// 加人和审批 → 邀请码加密存一份、换码 → 新电脑认领"我是谁" → 狗跟着你最近在用的那台 → 请人离开的投票、两人组不能踢
+// 只有一个人的组不能被人凭邀请码冒认 → 加人和审批 → 邀请码加密存一份、换码
+// → 新电脑认领"我是谁"（别人同意不够，要本人点"是我"） → 狗跟着你最近在用的那台 → 请人离开的投票、两人组不能踢
+// → 登录丢了凭本机的认领钥匙认回自己
 // → 远程看它（小图）、远程喂 → 碗上的"它在谁那儿" → 呼唤时留它一次 → 退出、最后一个人走了组就散了（测试数据不留）
 // 不动鼠标键盘，跑大约 8 分钟。用法：node tools/e2e/together-real.mjs
 import { spawn } from 'node:child_process';
@@ -22,11 +24,12 @@ async function until(fn, ms, every = 500) { const end = Date.now() + ms; let v; 
 
 // ---------- 开四个测试副本 ----------
 const procs = {}, dirs = {};
-for (const [k, [mp, pp]] of Object.entries(PORTS)) {
-  dirs[k] = fs.mkdtempSync(path.join(os.tmpdir(), `pet-e2e-${k}-`));
+const launch = k => {
+  const [mp, pp] = PORTS[k];
   procs[k] = spawn(ELECTRON, [`--inspect=${mp}`, '.', `--remote-debugging-port=${pp}`, `--user-data-dir=${dirs[k]}`],
     { cwd: ROOT, env: { ...process.env, PET_E2E: '1' }, stdio: 'ignore' });
-}
+};
+for (const k of Object.keys(PORTS)) { dirs[k] = fs.mkdtempSync(path.join(os.tmpdir(), `pet-e2e-${k}-`)); launch(k); }
 async function connect(url) {
   const ws = new WebSocket(url); let id = 0; const pending = new Map();
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result || m.error); pending.delete(m.id); } };
@@ -70,6 +73,16 @@ try {
   check('A 建组拿到邀请码', created.ok, { ok: created.ok, error: created.error });
   let code = created.code;
   const createdAt = Date.now();
+  // 1a) 组里只有 A 一个人时，拿到邀请码的人想冒认 A：A 的电脑最近还在，所以得 A 点"是我"，不能凭邀请码直接生效
+  const aMe0 = (await dbg('A')).me;
+  const pkS = await M.C(`${T}.peek(${JSON.stringify(code)})`);
+  const fake = await M.C(`${T}.claim(${JSON.stringify(code)}, ${JSON.stringify(aMe0)})`);
+  check('只有一个人的组：别人拿邀请码冒认 A，不能直接生效', pkS.ok && fake.ok && fake.status === 'pending', fake);
+  const seen = await until(async () => { const v = await view('A'); return v.claims.length ? v : null; }, 30000);
+  check('A 那边看到"有台新电脑说它是你"', !!seen && seen.claims[0].mine === true, seen && seen.claims);
+  const no = seen ? await M.A(`${T}.approveDevice(${JSON.stringify(seen.claims[0].user)}, ${JSON.stringify(seen.claims[0].member)}, false)`) : {};
+  check('A 点"不是"：冒认作废', no.ok && no.status === 'rejected', no);
+  check('冒认的那台回到没进组', !!(await until(async () => { await M.C(`${T}.refresh()`); return (await view('C')).mode === 'none'; }, 30000, 2000)));
   const pkB = await M.B(`${T}.peek(${JSON.stringify(code)})`);
   check('B 输码先看到组里有一个人', pkB.ok && pkB.members.length === 1, pkB);
   const jB = await M.B(`${T}.joinPet(${JSON.stringify(code)}, '')`);
@@ -112,12 +125,19 @@ try {
   await M.A('global.__petMain.openTogetherWindow(), 1'); await shot('A', 'togetherWin', 'claim-on-A');
   const cB = await view('B');
   check('B 那边也看到"有台新电脑说自己是 TA"（B 也能确认）', cB.claims.length === 1 && cB.claims[0].mine === false, cB.claims);
+  // 别人点同意不够：要组里除了 A 以外的人都同意（B 和 C），或者 A 本人点"是我"
+  const bOk = await M.B(`${T}.approveDevice(${JSON.stringify(cB.claims[0].user)}, ${JSON.stringify(cB.claims[0].member)}, true)`);
+  check('B 点同意还不够（还要 C，或者 A 本人点"是我"）', bOk.ok && bOk.status === 'pending', bOk);
+  const vBv = await view('B');
+  check('B 那边显示"你同意了，等其他人"', vBv.claims.some(c => c.voted), vBv.claims);
+  check('A2 还在等', (await view('A2')).mode === 'pending');
   const ap = await M.A(`${T}.approveDevice(${JSON.stringify(claimA.claims[0].user)}, ${JSON.stringify(claimA.claims[0].member)}, true)`);
   check('A 点"是我"', ap.ok && ap.status === 'active', ap);
   const vA2 = await until(async () => { const v = await view('A2'); return v.mode === 'ready' ? v : null; }, 30000);
   check('A2 进来了，身份就是 A', !!vA2 && (await dbg('A2')).me === aMe);
   check('A2：狗在你另一台电脑上（不会出现两只）', !!vA2 && vA2.onMyOther === true && vA2.here === false, vA2 && { here: vA2.here, onMyOther: vA2.onMyOther });
-  check('A2 的桌面上没有狗', !!(await until(() => page('A2', 'R.dog.abroad'), 15000)));
+  // 狗站着时是先走出屏幕边再消失：从 2048 宽屏幕的正中间走出去约 16 秒，给 40 秒
+  check('A2 的桌面上没有狗', !!(await until(() => page('A2', 'R.dog.abroad'), 40000)));
 
   // 4) 狗跟着最近在用的那台：A 那台没人用了（假装键鼠 400 秒没动），A2 叫它过来
   //    B、C 也假装不在，免得 A 那台"主人走开了"时把狗送去别人那儿
@@ -183,6 +203,20 @@ try {
   check('B 点碗：气泡说它在 TA 那儿', /它在 TA 那儿/.test(bub.text) && bub.btns.includes('看看它') && bub.btns.includes('叫它回来'), bub);
   const bubA = await P.A(`(() => { window.__rig.showAwayBubble(); return { text: document.getElementById('bubbleText').textContent, btns: [...document.querySelectorAll('#bubbleBtns button')].map(b => b.textContent) }; })()`);
   check('A 点碗：它在你另一台电脑上，按钮是"叫它过来"', /另一台电脑/.test(bubA.text) && bubA.btns.includes('叫它过来'), bubA);
+
+  // 6b) B 的登录丢了（服务器作废了凭据、后台清了匿名用户）：重启后换了个新身份。
+  //     凭本机的认领钥匙自己认回来，不用别人确认，也不会把组忘掉
+  const bBefore = await dbg('B');
+  procs.B.kill(); await new Promise(r => procs.B.once('exit', r)); await sleep(1000);
+  const vf = path.join(dirs.B, 'together.json'), vb = JSON.parse(fs.readFileSync(vf, 'utf8'));
+  for (const k of Object.keys(vb)) if (k.startsWith('auth:')) delete vb[k];
+  fs.writeFileSync(vf, JSON.stringify(vb, null, 1));
+  launch('B');
+  M.B = await connect(await target(PORTS.B[0]));
+  P.B = await connect(await target(PORTS.B[1], t => t.type === 'page' && /index\.html/.test(t.url)));
+  const vBr = await until(async () => { const v = await view('B'); return v.mode === 'ready' ? v : null; }, 60000, 1000);
+  const bAfter = await dbg('B');
+  check('B 的登录丢了：重启后自己认回来（同一个成员、新的身份，不用别人确认）', !!vBr && bAfter.me === bBefore.me && bAfter.uid !== bBefore.uid, { mode: vBr && vBr.mode, sameMember: bAfter.me === bBefore.me, newUid: bAfter.uid !== bBefore.uid });
 
   // 7) 呼唤时留它一次：A2 正在和它玩（刚摸过），B 叫它；等过了"刚到 5 分钟"的保护期
   await sleep(Math.max(0, createdAt + 5 * 60 * 1000 + 5000 - Date.now()));
