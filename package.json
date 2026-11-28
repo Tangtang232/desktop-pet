@@ -1,6 +1,6 @@
 {
   "name": "desktop-pet",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "和朋友合养的桌面宠物：一只会在任务栏上活动的 2D 骨骼动画比格",
   "homepage": "https://github.com/Tangtang232/desktop-pet",
